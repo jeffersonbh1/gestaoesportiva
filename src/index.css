@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+/* Custom scrollbar styles globally for modern browsers */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1; /* slate-300 */
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3b82f6; /* blue-500 */
+}
+
+/* Firefox scrollbar compatibility */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
