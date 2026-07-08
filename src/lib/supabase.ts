@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Court, Booking, User, Player } from '../types';
+import { Court, Booking, User, Player, PlayerRating } from '../types';
 
 const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
 const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
@@ -275,3 +275,52 @@ export async function dbDeleteBooking(bookingId: string): Promise<void> {
     throw error;
   }
 }
+
+// ====================================================================
+// AVALIAÇÕES DE JOGADORES (avaliacoes_jogadores)
+// ====================================================================
+export async function dbGetRatings(bookingId?: string): Promise<PlayerRating[]> {
+  if (!supabase) return [];
+  
+  let query = supabase.from('avaliacoes_jogadores').select('*');
+  if (bookingId) {
+    query = query.eq('agendamento_id', bookingId);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error('Erro ao obter avaliações do Supabase:', error);
+    throw error;
+  }
+
+  return (data || []).map((r) => ({
+    id: r.id,
+    bookingId: r.agendamento_id,
+    evaluatorName: r.avaliador_nome,
+    ratedPlayerName: r.jogador_avaliado_nome,
+    rating: r.nota,
+    createdAt: r.criado_em,
+  }));
+}
+
+export async function dbSaveRating(rating: PlayerRating): Promise<void> {
+  if (!supabase) return;
+
+  const dbRating = {
+    id: rating.id.length < 36 ? undefined : rating.id,
+    agendamento_id: rating.bookingId,
+    avaliador_nome: rating.evaluatorName,
+    jogador_avaliado_nome: rating.ratedPlayerName,
+    nota: rating.rating,
+  };
+
+  const { error } = await supabase
+    .from('avaliacoes_jogadores')
+    .upsert(dbRating, { onConflict: 'agendamento_id,avaliador_nome,jogador_avaliado_nome' });
+
+  if (error) {
+    console.error('Erro ao salvar avaliação no Supabase:', error);
+    throw error;
+  }
+}
+

@@ -55,3 +55,13 @@ export interface DailyTimelineSlot {
   booking?: Booking;
   isAvailable: boolean;
 }
+
+export interface PlayerRating {
+  id: string;
+  bookingId: string;
+  evaluatorName: string;
+  ratedPlayerName: string;
+  rating: number; // 1 to 5 stars
+  createdAt?: string;
+}
+

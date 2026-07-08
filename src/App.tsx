@@ -19,6 +19,7 @@ import PaymentHistory from './components/PaymentHistory';
 import CourtManager from './components/CourtManager';
 import BookingModal from './components/BookingModal';
 import PlayerSplitManager from './components/PlayerSplitManager';
+import PlayerRatingManager from './components/PlayerRatingManager';
 import Login from './components/Login';
 import UserManager from './components/UserManager';
 import { 
@@ -33,7 +34,8 @@ import {
   Volume2,
   Volleyball,
   LogOut,
-  Shield
+  Shield,
+  Trophy
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -417,6 +419,19 @@ export default function App() {
             </button>
 
             <button
+              id="nav-avaliacoes"
+              onClick={() => { setActiveTab('avaliacoes'); setMobileMenuOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                activeTab === 'avaliacoes' 
+                  ? 'bg-blue-50 text-blue-600 font-bold' 
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+              }`}
+            >
+              <Trophy className="h-4.5 w-4.5" />
+              Melhores do Jogo
+            </button>
+
+            <button
               id="nav-configuracoes"
               onClick={() => { setActiveTab('configuracoes'); setMobileMenuOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-semibold transition cursor-pointer ${
@@ -576,6 +591,20 @@ export default function App() {
                 bookings={bookings}
                 courts={courts}
                 onSaveBooking={handleSaveBooking}
+              />
+            </motion.div>
+          )}
+
+          {activeTab === 'avaliacoes' && (
+            <motion.div
+              key="avaliacoes"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.2 }}
+            >
+              <PlayerRatingManager 
+                bookings={bookings}
               />
             </motion.div>
           )}
