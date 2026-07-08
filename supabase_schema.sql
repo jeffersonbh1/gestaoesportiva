@@ -130,3 +130,32 @@ VALUES
 ('j0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000003', 'Bruno Matos', 'bruno@gmail.com', '(31) 98888-2222', FALSE, 45.00),
 ('j0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000003', 'Diego Souza', 'diego@gmail.com', '(31) 98888-3333', FALSE, 45.00)
 ON CONFLICT (id) DO NOTHING;
+
+-- ====================================================================
+-- 5. TABELA: avaliacoes_jogadores
+-- Funcionalidade: Avaliação de Jogadores da Partida (MVP/Melhores Jogadores)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS avaliacoes_jogadores (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    agendamento_id UUID NOT NULL REFERENCES agendamentos(id) ON DELETE CASCADE,
+    avaliador_nome VARCHAR(100) NOT NULL,
+    jogador_avaliado_nome VARCHAR(100) NOT NULL,
+    nota INT NOT NULL CHECK (nota BETWEEN 1 AND 5),
+    criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unica_avaliacao UNIQUE (agendamento_id, avaliador_nome, jogador_avaliado_nome)
+);
+
+CREATE INDEX IF NOT EXISTS idx_avaliacoes_agendamento ON avaliacoes_jogadores(agendamento_id);
+
+COMMENT ON TABLE avaliacoes_jogadores IS 'Tabela que armazena os votos de avaliações entre jogadores de uma partida/racha.';
+COMMENT ON COLUMN avaliacoes_jogadores.nota IS 'Nota de 1 a 5 estrelas atribuída de um jogador para o outro.';
+
+-- Sementes iniciais para avaliações demonstrativas na partida de ID a0000000-0000-0000-0000-000000000001
+INSERT INTO avaliacoes_jogadores (agendamento_id, avaliador_nome, jogador_avaliado_nome, nota)
+VALUES
+('a0000000-0000-0000-0000-000000000001', 'Matheus Santos', 'Pedro Ramos', 5),
+('a0000000-0000-0000-0000-000000000001', 'Pedro Ramos', 'Matheus Santos', 4),
+('a0000000-0000-0000-0000-000000000001', 'Rodrigo Silva', 'Matheus Santos', 5),
+('a0000000-0000-0000-0000-000000000001', 'Rodrigo Silva', 'Pedro Ramos', 4)
+ON CONFLICT (agendamento_id, avaliador_nome, jogador_avaliado_nome) DO NOTHING;
+
