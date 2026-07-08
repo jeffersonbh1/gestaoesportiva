@@ -1,0 +1,6 @@
+{
+  "name": "Arena Fahel Beach",
+  "description": "Sistema intuitivo para gestão e agendamento online de quadras de vôlei de areia e esportivas com controle de horários e histórico de pagamentos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
