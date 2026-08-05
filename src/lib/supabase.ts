@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Court, Booking, User, Player, PlayerRating, Sport, CourtTypeItem } from '../types';
+import { Court, Booking, BookingStudent, User, Player, PlayerRating, Sport, CourtTypeItem } from '../types';
 
 const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
 const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
@@ -243,6 +243,35 @@ export async function dbGetBookings(): Promise<Booking[]> {
     });
   });
 
+  // Buscar dados da tabela relational de aulas se disponível
+  let aulasMap: Record<string, { teacherId?: string; teacherName?: string; students: BookingStudent[] }> = {};
+  try {
+    const { data: aulasData } = await supabase
+      .from('aulas')
+      .select('agendamento_id, professor_id, aluno_id, professores(nome), alunos(nome)');
+    
+    if (aulasData && aulasData.length > 0) {
+      aulasData.forEach((a: any) => {
+        const bId = a.agendamento_id;
+        if (!aulasMap[bId]) {
+          aulasMap[bId] = {
+            teacherId: a.professor_id || undefined,
+            teacherName: a.professores?.nome || undefined,
+            students: []
+          };
+        }
+        if (a.aluno_id || a.alunos?.nome) {
+          aulasMap[bId].students.push({
+            studentId: a.aluno_id || `st-${Date.now()}`,
+            studentName: a.alunos?.nome || 'Aluno'
+          });
+        }
+      });
+    }
+  } catch (err) {
+    // Tabela aulas pode não existir ainda se a migration não foi executada
+  }
+
   return bData.map((b) => {
     const formatTime = (t: string) => (t ? t.slice(0, 5) : '00:00');
 
@@ -257,6 +286,11 @@ export async function dbGetBookings(): Promise<Booking[]> {
       }
     }
 
+    const classData = aulasMap[b.id];
+    const students = classData?.students && classData.students.length > 0 
+      ? classData.students 
+      : (b.aluno_id || b.aluno_nome ? [{ studentId: b.aluno_id || 'st-1', studentName: b.aluno_nome || '' }] : []);
+
     return {
       id: b.id,
       courtId: b.quadra_id,
@@ -267,10 +301,11 @@ export async function dbGetBookings(): Promise<Booking[]> {
       endTime: formatTime(b.horario_fim),
       sport: b.esporte,
       bookingType: bookingType,
-      teacherId: b.professor_id || undefined,
-      teacherName: b.professor_nome || undefined,
-      studentId: b.aluno_id || undefined,
-      studentName: b.aluno_nome || undefined,
+      teacherId: classData?.teacherId || b.professor_id || undefined,
+      teacherName: classData?.teacherName || b.professor_nome || undefined,
+      students: students,
+      studentId: students[0]?.studentId || b.aluno_id || undefined,
+      studentName: students[0]?.studentName || b.aluno_nome || undefined,
       totalValue: Number(b.valor_total),
       paymentStatus: b.status_pagamento,
       paymentMethod: b.metodo_pagamento,
@@ -330,19 +365,6 @@ export async function dbSaveBooking(booking: Booking): Promise<Booking | null> {
     observacoes: observacoes || null,
   };
 
-  if (booking.teacherId && isValidUuid(booking.teacherId)) {
-    dbBooking.professor_id = booking.teacherId;
-  }
-  if (booking.teacherName) {
-    dbBooking.professor_nome = booking.teacherName;
-  }
-  if (booking.studentId && isValidUuid(booking.studentId)) {
-    dbBooking.aluno_id = booking.studentId;
-  }
-  if (booking.studentName) {
-    dbBooking.aluno_nome = booking.studentName;
-  }
-
   // Se o ID for um UUID válido do banco, inclui para atualização (UPDATE)
   if (isValidUuid(booking.id)) {
     dbBooking.id = booking.id;
@@ -361,6 +383,35 @@ export async function dbSaveBooking(booking: Booking): Promise<Booking | null> {
   }
 
   const bookingId = data.id;
+
+  // 5. Salva vinculo na tabela de aulas para agendamentos do tipo Aula
+  if ((booking.bookingType || '').toLowerCase().includes('aula') || booking.teacherId || (booking.students && booking.students.length > 0)) {
+    try {
+      await supabase.from('aulas').delete().eq('agendamento_id', bookingId);
+
+      const teacherUuid = (booking.teacherId && isValidUuid(booking.teacherId)) ? booking.teacherId : null;
+      const studentsToInsert = booking.students && booking.students.length > 0
+        ? booking.students
+        : (booking.studentId ? [{ studentId: booking.studentId, studentName: booking.studentName || '' }] : []);
+
+      if (studentsToInsert.length > 0) {
+        const aulaRows = studentsToInsert.map((st) => ({
+          agendamento_id: bookingId,
+          professor_id: teacherUuid,
+          aluno_id: isValidUuid(st.studentId) ? st.studentId : null,
+        }));
+        await supabase.from('aulas').insert(aulaRows);
+      } else if (teacherUuid) {
+        await supabase.from('aulas').insert([{
+          agendamento_id: bookingId,
+          professor_id: teacherUuid,
+          aluno_id: null
+        }]);
+      }
+    } catch (aulasErr) {
+      console.warn('Erro ao sincronizar tabela aulas no Supabase:', aulasErr);
+    }
+  }
 
   // 5. Sincroniza os jogadores de racha (jogadores_racha)
   if (booking.players && booking.players.length > 0) {

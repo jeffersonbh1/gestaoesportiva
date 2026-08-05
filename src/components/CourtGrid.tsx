@@ -208,15 +208,39 @@ export default function CourtGrid({
                                 {isMaintenance ? 'MANUTENÇÃO' : booking.sport}
                               </span>
                             </div>
-                            <div className="mt-1 truncate">
+                            <div className="mt-1 truncate flex items-center justify-between">
                               <span className="text-[11px] font-bold tracking-tight block truncate">
                                 {booking.customerName}
                               </span>
+                              {(booking.students && booking.students.length > 0) && (
+                                <span className="text-[9px] font-extrabold px-1 py-0.2 bg-blue-100 text-blue-800 rounded-xs shrink-0 ml-1">
+                                  {booking.students.length} 🎓
+                                </span>
+                              )}
                             </div>
                             
                             {/* Hover Details Tooltip */}
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 bg-slate-900 text-white text-[11px] p-2.5 rounded-xl opacity-0 pointer-events-none group-hover:opacity-100 transition duration-200 z-20 shadow-xl border border-slate-700">
-                              <div className="font-bold flex items-center gap-1 text-slate-100"><User className="h-3.5 w-3.5 text-blue-400" /> {booking.customerName}</div>
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-slate-900 text-white text-[11px] p-2.5 rounded-xl opacity-0 pointer-events-none group-hover:opacity-100 transition duration-200 z-20 shadow-xl border border-slate-700">
+                              {((booking.bookingType || '').toLowerCase().includes('aula') || booking.teacherName) ? (
+                                <>
+                                  <div className="font-bold flex items-center gap-1 text-blue-300">
+                                    👨‍🏫 Prof: {booking.teacherName || booking.customerName}
+                                  </div>
+                                  {booking.students && booking.students.length > 0 ? (
+                                    <div className="mt-1 text-slate-200 text-[10px]">
+                                      <span className="font-bold text-amber-300">🎓 Alunos ({booking.students.length}):</span>{' '}
+                                      {booking.students.map(s => s.studentName).join(', ')}
+                                    </div>
+                                  ) : booking.studentName ? (
+                                    <div className="mt-1 text-slate-200 text-[10px]">
+                                      <span className="font-bold text-amber-300">🎓 Aluno:</span> {booking.studentName}
+                                    </div>
+                                  ) : null}
+                                </>
+                              ) : (
+                                <div className="font-bold flex items-center gap-1 text-slate-100"><User className="h-3.5 w-3.5 text-blue-400" /> {booking.customerName}</div>
+                              )}
+                              
                               <div className="mt-1 font-mono text-[10px] text-slate-300"><Phone className="h-3 w-3 inline mr-1 text-slate-400" /> {booking.customerPhone}</div>
                               <div className="mt-1 font-semibold text-blue-300">🏐 {booking.sport}</div>
                               {booking.bookingType && (

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Court, Booking, Player, SportType, BookingType, PaymentStatus, PaymentMethod, RentalType, Sport, Teacher, Student } from '../types';
+import { Court, Booking, BookingStudent, Player, SportType, BookingType, PaymentStatus, PaymentMethod, RentalType, Sport, Teacher, Student } from '../types';
 import { INITIAL_RENTAL_TYPES, INITIAL_SPORTS, INITIAL_TEACHERS, INITIAL_STUDENTS } from '../data/mockData';
 import { TIME_SLOTS, formatCurrency, getBookingOverlap, formatPhoneNumber, timeToMinutes } from '../utils';
 import { 
@@ -18,7 +18,8 @@ import {
   Trash2,
   Wrench,
   GraduationCap,
-  UserCheck
+  UserCheck,
+  Plus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -71,11 +72,13 @@ export default function BookingModal({
   const [teacherName, setTeacherName] = useState('');
   const [studentId, setStudentId] = useState('');
   const [studentName, setStudentName] = useState('');
+  const [selectedStudents, setSelectedStudents] = useState<BookingStudent[]>([]);
+  const [customStudentInput, setCustomStudentInput] = useState('');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Pendente');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Pix');
   const [notes, setNotes] = useState('');
   const [players, setPlayers] = useState<Player[]>([]);
-  
+
   // Real-time calculated price
   const [totalValue, setTotalValue] = useState(0);
   const [formattedValue, setFormattedValue] = useState('0,00');
@@ -109,6 +112,7 @@ export default function BookingModal({
   useEffect(() => {
     if (isOpen) {
       setConfirmDelete(false);
+      setCustomStudentInput('');
       if (editingBooking) {
         setCourtId(editingBooking.courtId);
         setCustomerName(editingBooking.customerName);
@@ -122,6 +126,18 @@ export default function BookingModal({
         setTeacherName(editingBooking.teacherName || '');
         setStudentId(editingBooking.studentId || '');
         setStudentName(editingBooking.studentName || '');
+        
+        if (editingBooking.students && editingBooking.students.length > 0) {
+          setSelectedStudents(editingBooking.students);
+        } else if (editingBooking.studentId || editingBooking.studentName) {
+          setSelectedStudents([{
+            studentId: editingBooking.studentId || `st-${Date.now()}`,
+            studentName: editingBooking.studentName || 'Aluno'
+          }]);
+        } else {
+          setSelectedStudents([]);
+        }
+
         setPaymentStatus(editingBooking.paymentStatus);
         setPaymentMethod(editingBooking.paymentMethod);
         setNotes(editingBooking.notes || '');
@@ -146,6 +162,7 @@ export default function BookingModal({
         setTeacherName('');
         setStudentId('');
         setStudentName('');
+        setSelectedStudents([]);
         setPaymentStatus('Pendente');
         setPaymentMethod('Pix');
         setNotes('');
@@ -154,6 +171,28 @@ export default function BookingModal({
       }
     }
   }, [isOpen, editingBooking, presetCourtId, presetStartTime, selectedDate, courts]);
+
+  const handleAddSelectedStudent = (studentIdVal: string) => {
+    if (!studentIdVal) return;
+    const found = students.find(s => s.id === studentIdVal);
+    const name = found ? found.name : studentIdVal;
+    if (!selectedStudents.some(s => s.studentId === studentIdVal || s.studentName === name)) {
+      setSelectedStudents(prev => [...prev, { studentId: studentIdVal, studentName: name }]);
+    }
+  };
+
+  const handleAddCustomStudent = () => {
+    const trimmed = customStudentInput.trim();
+    if (!trimmed) return;
+    if (!selectedStudents.some(s => s.studentName.toLowerCase() === trimmed.toLowerCase())) {
+      setSelectedStudents(prev => [...prev, { studentId: `st-custom-${Date.now()}`, studentName: trimmed }]);
+    }
+    setCustomStudentInput('');
+  };
+
+  const handleRemoveStudent = (index: number) => {
+    setSelectedStudents(prev => prev.filter((_, i) => i !== index));
+  };
 
   // Handle auto-updating calculated value & overlap checks
   useEffect(() => {
@@ -205,10 +244,10 @@ export default function BookingModal({
     if (overlapWarning) return;
     
     let finalCustomerName = customerName.trim();
-    if (!finalCustomerName) {
-      if (isClassBooking) {
-        finalCustomerName = studentName ? `Aluno: ${studentName}` : 'Aluno de Aula';
-      } else if (bookingType === 'Manutenção') {
+    if (isClassBooking) {
+      finalCustomerName = teacherName.trim() || customerName.trim() || 'Prof. da Aula';
+    } else if (!finalCustomerName) {
+      if (bookingType === 'Manutenção') {
         finalCustomerName = 'Manutenção da Quadra';
       }
     }
@@ -227,8 +266,9 @@ export default function BookingModal({
       bookingType,
       teacherId: isClassBooking ? (teacherId || undefined) : undefined,
       teacherName: isClassBooking ? (teacherName || undefined) : undefined,
-      studentId: isClassBooking ? (studentId || undefined) : undefined,
-      studentName: isClassBooking ? (studentName || undefined) : undefined,
+      students: isClassBooking ? selectedStudents : undefined,
+      studentId: isClassBooking ? (selectedStudents[0]?.studentId || undefined) : undefined,
+      studentName: isClassBooking ? (selectedStudents[0]?.studentName || undefined) : undefined,
       totalValue,
       paymentStatus,
       paymentMethod,
@@ -387,77 +427,129 @@ export default function BookingModal({
             </div>
           </div>
 
-          {/* Professor & Aluno Section (Enabled when bookingType contains Aula) */}
+          {/* Professor & Alunos Section (Enabled when bookingType contains Aula) */}
           {isClassBooking && (
             <motion.div 
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
-              className="p-4 bg-blue-50/80 border border-blue-200 rounded-2xl space-y-3"
+              className="p-4 bg-blue-50/90 border border-blue-200 rounded-2xl space-y-4"
             >
-              <div className="flex items-center gap-2 text-blue-900 font-bold text-xs uppercase tracking-wider">
-                <GraduationCap className="h-4 w-4 text-blue-600" />
-                <span>Vínculo de Aula (Professor & Aluno)</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Professor */}
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1 flex items-center gap-1">
-                    <UserCheck className="h-3.5 w-3.5 text-blue-600" />
-                    Professor *
-                  </label>
-                  <select
-                    value={teacherId}
-                    onChange={(e) => {
-                      const idVal = e.target.value;
-                      setTeacherId(idVal);
-                      const found = teachers.find(t => t.id === idVal);
-                      setTeacherName(found ? found.name : idVal);
-                    }}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                  >
-                    <option value="">-- Selecione o Professor --</option>
-                    {teachers.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        👨‍🏫 {t.name} ({t.sport})
-                      </option>
-                    ))}
-                  </select>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-blue-900 font-bold text-xs uppercase tracking-wider">
+                  <GraduationCap className="h-4 w-4 text-blue-600" />
+                  <span>Vínculo de Aula (Professor & Alunos)</span>
                 </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full">
+                  {selectedStudents.length} Aluno(s) nesta aula
+                </span>
+              </div>
 
-                {/* Aluno */}
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1 flex items-center gap-1">
+              {/* Professor Selection */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1 flex items-center gap-1">
+                  <UserCheck className="h-3.5 w-3.5 text-blue-600" />
+                  Professor Responsável (Nome do Cliente no Agendamento) *
+                </label>
+                <select
+                  value={teacherId}
+                  onChange={(e) => {
+                    const idVal = e.target.value;
+                    setTeacherId(idVal);
+                    const found = teachers.find(t => t.id === idVal);
+                    const tName = found ? found.name : idVal;
+                    setTeacherName(tName);
+                    setCustomerName(tName);
+                    if (found?.phone) setCustomerPhone(found.phone);
+                  }}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="">-- Selecione o Professor --</option>
+                  {teachers.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      👨‍🏫 {t.name} ({t.sport})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Alunos Selection (Multiple Students) */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 block flex items-center justify-between">
+                  <span className="flex items-center gap-1">
                     <User className="h-3.5 w-3.5 text-blue-600" />
-                    Aluno Contratante *
-                  </label>
+                    Alunos Participantes da Aula *
+                  </span>
+                </label>
+
+                {/* Add Student Control Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <select
-                    value={studentId}
                     onChange={(e) => {
-                      const idVal = e.target.value;
-                      setStudentId(idVal);
-                      const found = students.find(s => s.id === idVal);
-                      if (found) {
-                        setStudentName(found.name);
-                        if (!customerName) setCustomerName(found.name);
-                        if (!customerPhone && found.phone) setCustomerPhone(found.phone);
-                        if (found.teacherId && !teacherId) {
-                          setTeacherId(found.teacherId);
-                          setTeacherName(found.teacherName || '');
-                        }
-                      } else {
-                        setStudentName(idVal);
-                      }
+                      handleAddSelectedStudent(e.target.value);
+                      e.target.value = '';
                     }}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                   >
-                    <option value="">-- Selecione o Aluno --</option>
+                    <option value="">+ Selecionar Aluno Cadastrado...</option>
                     {students.map((s) => (
                       <option key={s.id} value={s.id}>
                         🎓 {s.name} ({s.sport} - {s.level})
                       </option>
                     ))}
                   </select>
+
+                  {/* Add Custom Student */}
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      placeholder="Nome do aluno (manual)"
+                      value={customStudentInput}
+                      onChange={(e) => setCustomStudentInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddCustomStudent();
+                        }
+                      }}
+                      className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCustomStudent}
+                      className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add
+                    </button>
+                  </div>
                 </div>
+
+                {/* Enrolled Students Badge List */}
+                {selectedStudents.length > 0 ? (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {selectedStudents.map((st, idx) => (
+                      <span
+                        key={st.studentId || idx}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-blue-200 text-blue-900 rounded-xl text-xs font-bold shadow-2xs"
+                      >
+                        <User className="h-3 w-3 text-blue-500" />
+                        {st.studentName}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveStudent(idx)}
+                          className="ml-1 text-slate-400 hover:text-rose-600 p-0.5 rounded-full transition cursor-pointer"
+                          title="Remover aluno da aula"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-400 italic font-medium">
+                    Nenhum aluno adicionado ainda. Selecione um aluno acima ou digite o nome.
+                  </p>
+                )}
               </div>
             </motion.div>
           )}

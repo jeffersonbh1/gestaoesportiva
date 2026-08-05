@@ -48,6 +48,11 @@ export interface Player {
   amount: number;
 }
 
+export interface BookingStudent {
+  studentId: string;
+  studentName: string;
+}
+
 export interface Booking {
   id: string;
   courtId: string;
@@ -60,6 +65,7 @@ export interface Booking {
   bookingType?: BookingType;
   teacherId?: string;
   teacherName?: string;
+  students?: BookingStudent[];
   studentId?: string;
   studentName?: string;
   totalValue: number;

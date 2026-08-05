@@ -68,10 +68,15 @@ CREATE TABLE IF NOT EXISTS agendamentos (
 
 -- Garantir coluna tipo_agendamento se a tabela já existir
 ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS tipo_agendamento VARCHAR(50) DEFAULT 'Aluguel';
-ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS professor_id UUID REFERENCES professores(id) ON DELETE SET NULL;
-ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS professor_nome VARCHAR(100);
-ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS aluno_id UUID REFERENCES alunos(id) ON DELETE SET NULL;
-ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS aluno_nome VARCHAR(100);
+
+-- ====================================================================
+-- SCRIPT DE ALTERAÇÃO DA TABELA AGENDAMENTOS
+-- Removendo colunas redundantes pois o vínculo de professor e alunos é armazenado na tabela aulas
+-- ====================================================================
+ALTER TABLE agendamentos DROP COLUMN IF EXISTS professor_id;
+ALTER TABLE agendamentos DROP COLUMN IF EXISTS professor_nome;
+ALTER TABLE agendamentos DROP COLUMN IF EXISTS aluno_id;
+ALTER TABLE agendamentos DROP COLUMN IF EXISTS aluno_nome;
 
 -- ====================================================================
 -- 3B. TABELA: professores
@@ -108,6 +113,20 @@ CREATE TABLE IF NOT EXISTS alunos (
 );
 
 COMMENT ON TABLE alunos IS 'Tabela de cadastro e gestão dos alunos das aulas da arena.';
+
+-- ====================================================================
+-- 3D. TABELA: aulas
+-- Funcionalidade: Associação de Aulas, Professores e Múltiplos Alunos por Agendamento
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS aulas (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    agendamento_id UUID NOT NULL REFERENCES agendamentos(id) ON DELETE CASCADE,
+    professor_id UUID REFERENCES professores(id) ON DELETE SET NULL,
+    aluno_id UUID REFERENCES alunos(id) ON DELETE CASCADE,
+    criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE aulas IS 'Tabela de vínculo de aulas entre agendamento, professor e múltiplos alunos.';
 
 -- ====================================================================
 -- 3B. TABELA: esportes
@@ -147,9 +166,13 @@ ALTER TABLE esportes DISABLE ROW LEVEL SECURITY;
 ALTER TABLE tipos_quadra DISABLE ROW LEVEL SECURITY;
 ALTER TABLE professores DISABLE ROW LEVEL SECURITY;
 ALTER TABLE alunos DISABLE ROW LEVEL SECURITY;
+ALTER TABLE aulas DISABLE ROW LEVEL SECURITY;
 
 CREATE INDEX IF NOT EXISTS idx_agendamentos_data ON agendamentos(data);
 CREATE INDEX IF NOT EXISTS idx_agendamentos_quadra ON agendamentos(quadra_id);
+CREATE INDEX IF NOT EXISTS idx_aulas_agendamento ON aulas(agendamento_id);
+CREATE INDEX IF NOT EXISTS idx_aulas_professor ON aulas(professor_id);
+CREATE INDEX IF NOT EXISTS idx_aulas_aluno ON aulas(aluno_id);
 
 COMMENT ON TABLE agendamentos IS 'Tabela principal de reservas das quadras, contendo dados do cliente contratante, horários, esporte e pagamento.';
 

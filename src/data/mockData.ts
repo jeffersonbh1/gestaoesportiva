@@ -98,16 +98,23 @@ export const getInitialBookings = (): Booking[] => {
     {
       id: 'book-2',
       courtId: 'court-1',
-      customerName: 'Mariana Costa',
-      customerPhone: '(21) 99123-4567',
+      customerName: 'Profa. Carolina Silva',
+      customerPhone: '(11) 98765-4321',
       date: today,
       startTime: '10:00',
       endTime: '11:00',
       sport: 'Beach Tennis',
-      totalValue: 90,
+      bookingType: 'Aula de beach tennis',
+      teacherId: 'teacher-2',
+      teacherName: 'Profa. Carolina Silva',
+      students: [
+        { studentId: 'student-2', studentName: 'Mariana Costa' },
+        { studentId: 'student-1', studentName: 'Gabriel Santos' }
+      ],
+      totalValue: 110,
       paymentStatus: 'Pago',
       paymentMethod: 'Cartão de Crédito',
-      notes: 'Aluguel de raquetes incluso.',
+      notes: 'Aula em grupo com 2 alunos.',
       createdAt: new Date('2026-07-06T17:30:00').toISOString(),
     },
     {
