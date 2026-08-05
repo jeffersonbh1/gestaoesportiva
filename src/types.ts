@@ -119,5 +119,6 @@ export interface Student {
   level: 'Iniciante' | 'Intermediário' | 'Avançado';
   status: 'Ativo' | 'Inativo';
   monthlyFee?: number;
+  notes?: string;
 }
 

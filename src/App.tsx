@@ -17,7 +17,9 @@ import {
   dbDeleteSport,
   dbGetCourtTypes,
   dbSaveCourtType,
-  dbDeleteCourtType
+  dbDeleteCourtType,
+  dbGetTeachers,
+  dbGetStudents
 } from './lib/supabase';
 import Dashboard from './components/Dashboard';
 import CourtGrid from './components/CourtGrid';
@@ -146,12 +148,14 @@ export default function App() {
       try {
         setDbLoading(true);
         setDbError(null);
-        const [dbUsers, dbCourts, dbBookings, dbSports, dbCourtTypes] = await Promise.all([
+        const [dbUsers, dbCourts, dbBookings, dbSports, dbCourtTypes, dbTeachers, dbStudents] = await Promise.all([
           dbGetUsers(),
           dbGetCourts(),
           dbGetBookings(),
           dbGetSports(),
-          dbGetCourtTypes()
+          dbGetCourtTypes(),
+          dbGetTeachers(),
+          dbGetStudents()
         ]);
         
         if (dbUsers.length > 0) setUsers(dbUsers);
@@ -159,6 +163,8 @@ export default function App() {
         setBookings(dbBookings);
         if (dbSports.length > 0) setSports(dbSports);
         if (dbCourtTypes.length > 0) setCourtTypes(dbCourtTypes);
+        if (dbTeachers.length > 0) setTeachers(dbTeachers);
+        if (dbStudents.length > 0) setStudents(dbStudents);
       } catch (err: any) {
         console.error("Erro ao carregar dados do Supabase:", err);
         setDbError(`Erro ao carregar do Supabase: ${err.message || 'Verifique se executou o script SQL'}`);

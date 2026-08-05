@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Court, Booking, BookingStudent, User, Player, PlayerRating, Sport, CourtTypeItem } from '../types';
+import { Court, Booking, BookingStudent, User, Player, PlayerRating, Sport, CourtTypeItem, Teacher, Student } from '../types';
 
 const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
 const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
@@ -113,9 +113,239 @@ export async function dbDeleteUser(userId: string): Promise<void> {
   }
 }
 
+// Helper para garantir UUID de professor no Supabase
+async function ensureTeacherUuid(teacherId?: string, teacherName?: string, sport?: string): Promise<string | null> {
+  if (teacherId && isValidUuid(teacherId)) return teacherId;
+  if (!teacherName || !teacherName.trim()) return null;
+
+  const cleanName = teacherName.trim();
+
+  try {
+    // 1. Tenta buscar pelo nome na tabela professores
+    const { data } = await supabase
+      .from('professores')
+      .select('id')
+      .ilike('nome', cleanName)
+      .limit(1);
+
+    if (data && data[0]) {
+      return data[0].id;
+    }
+
+    // 2. Se não encontrou, insere novo professor na tabela professores para gerar UUID
+    const { data: inserted, error } = await supabase
+      .from('professores')
+      .insert({
+        nome: cleanName,
+        esporte: sport || 'Futevôlei',
+        status: 'Ativo'
+      })
+      .select('id')
+      .single();
+
+    if (inserted) return inserted.id;
+    if (error) console.warn('Aviso ao inserir professor em professores:', error);
+  } catch (err) {
+    console.warn('Erro em ensureTeacherUuid:', err);
+  }
+
+  return null;
+}
+
+// Helper para garantir UUID de aluno no Supabase
+async function ensureStudentUuid(studentId?: string, studentName?: string, sport?: string, teacherIdUuid?: string | null): Promise<string | null> {
+  if (studentId && isValidUuid(studentId)) return studentId;
+  if (!studentName || !studentName.trim()) return null;
+
+  const cleanName = studentName.trim();
+
+  try {
+    // 1. Tenta buscar pelo nome na tabela alunos
+    const { data } = await supabase
+      .from('alunos')
+      .select('id')
+      .ilike('nome', cleanName)
+      .limit(1);
+
+    if (data && data[0]) {
+      return data[0].id;
+    }
+
+    // 2. Se não encontrou, insere novo aluno na tabela alunos para gerar UUID
+    const studentPayload: any = {
+      nome: cleanName,
+      esporte: sport || 'Futevôlei',
+      status: 'Ativo'
+    };
+    if (teacherIdUuid) {
+      studentPayload.professor_id = teacherIdUuid;
+    }
+
+    const { data: inserted, error } = await supabase
+      .from('alunos')
+      .insert(studentPayload)
+      .select('id')
+      .single();
+
+    if (inserted) return inserted.id;
+    if (error) console.warn('Aviso ao inserir aluno em alunos:', error);
+  } catch (err) {
+    console.warn('Erro em ensureStudentUuid:', err);
+  }
+
+  return null;
+}
+
 // ====================================================================
-// QUADRAS (tabela: quadras)
+// PROFESSORES & ALUNOS (tabelas: professores, alunos)
 // ====================================================================
+
+export async function dbGetTeachers(): Promise<Teacher[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('professores')
+      .select('*')
+      .order('nome', { ascending: true });
+
+    if (error) {
+      console.error('Erro ao buscar professores do Supabase:', error);
+      return [];
+    }
+
+    return (data || []).map((p) => ({
+      id: p.id,
+      name: p.nome,
+      phone: p.telefone || '',
+      sport: p.esporte || 'Futevôlei',
+      email: p.email || undefined,
+      pricePerClass: Number(p.preco_aula) || 0,
+      status: p.status || 'Ativo',
+      notes: p.observacoes || undefined,
+    }));
+  } catch (err) {
+    console.warn('Erro ao buscar professores:', err);
+    return [];
+  }
+}
+
+export async function dbSaveTeacher(teacher: Teacher): Promise<Teacher | null> {
+  if (!supabase) return null;
+
+  const dbProf: any = {
+    nome: teacher.name,
+    telefone: teacher.phone || null,
+    esporte: teacher.sport || 'Futevôlei',
+    email: teacher.email || null,
+    preco_aula: Number(teacher.pricePerClass) || 0,
+    status: teacher.status || 'Ativo',
+    observacoes: teacher.notes || null,
+  };
+
+  if (isValidUuid(teacher.id)) {
+    dbProf.id = teacher.id;
+  }
+
+  const { data, error } = await supabase
+    .from('professores')
+    .upsert(dbProf)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Erro ao salvar professor no Supabase:', error);
+    throw error;
+  }
+
+  if (data) {
+    return {
+      id: data.id,
+      name: data.nome,
+      phone: data.telefone || '',
+      sport: data.esporte || 'Futevôlei',
+      email: data.email || undefined,
+      pricePerClass: Number(data.preco_aula) || 0,
+      status: data.status || 'Ativo',
+      notes: data.observacoes || undefined,
+    };
+  }
+
+  return null;
+}
+
+export async function dbGetStudents(): Promise<Student[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('alunos')
+      .select('*, professores(nome)')
+      .order('nome', { ascending: true });
+
+    if (error) {
+      console.error('Erro ao buscar alunos do Supabase:', error);
+      return [];
+    }
+
+    return (data || []).map((a) => ({
+      id: a.id,
+      name: a.nome,
+      phone: a.telefone || '',
+      sport: a.esporte || 'Futevôlei',
+      level: a.nivel || 'Iniciante',
+      teacherId: a.professor_id || undefined,
+      teacherName: a.professores?.nome || undefined,
+      status: a.status || 'Ativo',
+      notes: a.observacoes || undefined,
+    }));
+  } catch (err) {
+    console.warn('Erro ao buscar alunos:', err);
+    return [];
+  }
+}
+
+export async function dbSaveStudent(student: Student): Promise<Student | null> {
+  if (!supabase) return null;
+
+  const dbAluno: any = {
+    nome: student.name,
+    telefone: student.phone || null,
+    esporte: student.sport || 'Futevôlei',
+    nivel: student.level || 'Iniciante',
+    professor_id: isValidUuid(student.teacherId || '') ? student.teacherId : null,
+    status: student.status || 'Ativo',
+    observacoes: student.notes || null,
+  };
+
+  if (isValidUuid(student.id)) {
+    dbAluno.id = student.id;
+  }
+
+  const { data, error } = await supabase
+    .from('alunos')
+    .upsert(dbAluno)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Erro ao salvar aluno no Supabase:', error);
+    throw error;
+  }
+
+  if (data) {
+    return {
+      id: data.id,
+      name: data.nome,
+      phone: data.telefone || '',
+      sport: data.esporte || 'Futevôlei',
+      level: data.nivel || 'Iniciante',
+      teacherId: data.professor_id || undefined,
+      status: data.status || 'Ativo',
+      notes: data.observacoes || undefined,
+    };
+  }
+
+  return null;
+}
 
 export async function dbGetCourts(): Promise<Court[]> {
   if (!supabase) return [];
@@ -385,17 +615,11 @@ export async function dbSaveBooking(booking: Booking): Promise<Booking | null> {
   const bookingId = data.id;
 
   // 5. Salva vinculo na tabela de aulas para agendamentos do tipo Aula
-  if ((booking.bookingType || '').toLowerCase().includes('aula') || booking.teacherId || (booking.students && booking.students.length > 0)) {
+  if ((booking.bookingType || '').toLowerCase().includes('aula') || booking.teacherId || booking.teacherName || (booking.students && booking.students.length > 0)) {
     try {
       await supabase.from('aulas').delete().eq('agendamento_id', bookingId);
 
-      let teacherUuid = (booking.teacherId && isValidUuid(booking.teacherId)) ? booking.teacherId : null;
-      if (!teacherUuid && booking.teacherName) {
-        const { data: profData } = await supabase.from('professores').select('id').eq('nome', booking.teacherName).limit(1);
-        if (profData && profData[0]) {
-          teacherUuid = profData[0].id;
-        }
-      }
+      const teacherUuid = await ensureTeacherUuid(booking.teacherId, booking.teacherName, booking.sport);
 
       const studentsToInsert = booking.students && booking.students.length > 0
         ? booking.students
@@ -404,13 +628,7 @@ export async function dbSaveBooking(booking: Booking): Promise<Booking | null> {
       if (studentsToInsert.length > 0) {
         const aulaRows = [];
         for (const st of studentsToInsert) {
-          let studentUuid = (st.studentId && isValidUuid(st.studentId)) ? st.studentId : null;
-          if (!studentUuid && st.studentName) {
-            const { data: alData } = await supabase.from('alunos').select('id').eq('nome', st.studentName).limit(1);
-            if (alData && alData[0]) {
-              studentUuid = alData[0].id;
-            }
-          }
+          const studentUuid = await ensureStudentUuid(st.studentId, st.studentName, booking.sport, teacherUuid);
           aulaRows.push({
             agendamento_id: bookingId,
             professor_id: teacherUuid,
