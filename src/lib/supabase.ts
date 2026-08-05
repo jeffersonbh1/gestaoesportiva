@@ -389,17 +389,34 @@ export async function dbSaveBooking(booking: Booking): Promise<Booking | null> {
     try {
       await supabase.from('aulas').delete().eq('agendamento_id', bookingId);
 
-      const teacherUuid = (booking.teacherId && isValidUuid(booking.teacherId)) ? booking.teacherId : null;
+      let teacherUuid = (booking.teacherId && isValidUuid(booking.teacherId)) ? booking.teacherId : null;
+      if (!teacherUuid && booking.teacherName) {
+        const { data: profData } = await supabase.from('professores').select('id').eq('nome', booking.teacherName).limit(1);
+        if (profData && profData[0]) {
+          teacherUuid = profData[0].id;
+        }
+      }
+
       const studentsToInsert = booking.students && booking.students.length > 0
         ? booking.students
         : (booking.studentId ? [{ studentId: booking.studentId, studentName: booking.studentName || '' }] : []);
 
       if (studentsToInsert.length > 0) {
-        const aulaRows = studentsToInsert.map((st) => ({
-          agendamento_id: bookingId,
-          professor_id: teacherUuid,
-          aluno_id: isValidUuid(st.studentId) ? st.studentId : null,
-        }));
+        const aulaRows = [];
+        for (const st of studentsToInsert) {
+          let studentUuid = (st.studentId && isValidUuid(st.studentId)) ? st.studentId : null;
+          if (!studentUuid && st.studentName) {
+            const { data: alData } = await supabase.from('alunos').select('id').eq('nome', st.studentName).limit(1);
+            if (alData && alData[0]) {
+              studentUuid = alData[0].id;
+            }
+          }
+          aulaRows.push({
+            agendamento_id: bookingId,
+            professor_id: teacherUuid,
+            aluno_id: studentUuid,
+          });
+        }
         await supabase.from('aulas').insert(aulaRows);
       } else if (teacherUuid) {
         await supabase.from('aulas').insert([{

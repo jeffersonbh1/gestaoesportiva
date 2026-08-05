@@ -73,7 +73,6 @@ export default function BookingModal({
   const [studentId, setStudentId] = useState('');
   const [studentName, setStudentName] = useState('');
   const [selectedStudents, setSelectedStudents] = useState<BookingStudent[]>([]);
-  const [customStudentInput, setCustomStudentInput] = useState('');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Pendente');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Pix');
   const [notes, setNotes] = useState('');
@@ -112,7 +111,6 @@ export default function BookingModal({
   useEffect(() => {
     if (isOpen) {
       setConfirmDelete(false);
-      setCustomStudentInput('');
       if (editingBooking) {
         setCourtId(editingBooking.courtId);
         setCustomerName(editingBooking.customerName);
@@ -179,15 +177,6 @@ export default function BookingModal({
     if (!selectedStudents.some(s => s.studentId === studentIdVal || s.studentName === name)) {
       setSelectedStudents(prev => [...prev, { studentId: studentIdVal, studentName: name }]);
     }
-  };
-
-  const handleAddCustomStudent = () => {
-    const trimmed = customStudentInput.trim();
-    if (!trimmed) return;
-    if (!selectedStudents.some(s => s.studentName.toLowerCase() === trimmed.toLowerCase())) {
-      setSelectedStudents(prev => [...prev, { studentId: `st-custom-${Date.now()}`, studentName: trimmed }]);
-    }
-    setCustomStudentInput('');
   };
 
   const handleRemoveStudent = (index: number) => {
@@ -472,64 +461,33 @@ export default function BookingModal({
                 </select>
               </div>
 
-              {/* Alunos Selection (Multiple Students) */}
+              {/* Alunos Selection (Multiple Registered Students) */}
               <div className="space-y-3 pt-1 border-t border-blue-200/40">
                 <label className="text-xs font-bold text-slate-800 block flex items-center gap-1">
                   <User className="h-3.5 w-3.5 text-blue-600" />
-                  Adicionar Aluno(s) à Aula *
+                  Adicionar Aluno(s) Cadastrado(s) à Aula *
                 </label>
 
-                {/* Method 1: Registered Student Selection */}
-                <div className="space-y-1">
-                  <span className="text-[11px] font-medium text-slate-500 block">Aluno Cadastrado no Sistema:</span>
-                  <div className="flex gap-2">
-                    <select
-                      id="registered-student-select"
-                      defaultValue=""
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          handleAddSelectedStudent(e.target.value);
-                          e.target.value = '';
-                        }
-                      }}
-                      className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-2xs"
-                    >
-                      <option value="">+ Selecionar Aluno Cadastrado...</option>
-                      {students.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          🎓 {s.name} ({s.sport} - {s.level})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Method 2: Manual Student Input */}
-                <div className="space-y-1">
-                  <span className="text-[11px] font-medium text-slate-500 block">Ou Digite o Nome do Aluno:</span>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Ex: João Souza"
-                      value={customStudentInput}
-                      onChange={(e) => setCustomStudentInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleAddCustomStudent();
-                        }
-                      }}
-                      className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddCustomStudent}
-                      className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0 shadow-xs"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Adicionar
-                    </button>
-                  </div>
+                {/* Registered Student Selection */}
+                <div className="flex gap-2">
+                  <select
+                    id="registered-student-select"
+                    defaultValue=""
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleAddSelectedStudent(e.target.value);
+                        e.target.value = '';
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-2xs"
+                  >
+                    <option value="">+ Selecionar Aluno Cadastrado...</option>
+                    {students.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        🎓 {s.name} ({s.sport} - {s.level})
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Enrolled Students Badge List */}
@@ -560,7 +518,7 @@ export default function BookingModal({
                   ) : (
                     <div className="p-3 bg-white/60 border border-dashed border-blue-200 rounded-xl text-center">
                       <p className="text-[11px] text-slate-400 italic font-medium">
-                        Nenhum aluno adicionado ainda. Escolha na lista acima ou digite o nome.
+                        Nenhum aluno adicionado ainda. Selecione um aluno cadastrado na lista acima.
                       </p>
                     </div>
                   )}
