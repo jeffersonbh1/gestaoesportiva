@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Court, Booking, Player, SportType, BookingType, PaymentStatus, PaymentMethod, RentalType } from '../types';
-import { INITIAL_RENTAL_TYPES } from '../data/mockData';
+import { Court, Booking, Player, SportType, BookingType, PaymentStatus, PaymentMethod, RentalType, Sport } from '../types';
+import { INITIAL_RENTAL_TYPES, INITIAL_SPORTS } from '../data/mockData';
 import { TIME_SLOTS, formatCurrency, getBookingOverlap, formatPhoneNumber, timeToMinutes } from '../utils';
 import { 
   X, 
@@ -26,6 +26,7 @@ interface BookingModalProps {
   courts: Court[];
   bookings: Booking[];
   rentalTypes?: RentalType[];
+  sports?: Sport[];
   selectedDate: string;
   presetCourtId?: string;
   presetStartTime?: string;
@@ -41,6 +42,7 @@ export default function BookingModal({
   courts,
   bookings,
   rentalTypes = INITIAL_RENTAL_TYPES,
+  sports = INITIAL_SPORTS,
   selectedDate,
   presetCourtId,
   presetStartTime,
@@ -329,10 +331,11 @@ export default function BookingModal({
                   onChange={(e) => setSport(e.target.value as SportType)}
                   className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-semibold text-slate-700 cursor-pointer"
                 >
-                  <option value="Vôlei de Areia">🏐 Vôlei de Areia</option>
-                  <option value="Futevôlei">⚽ Futevôlei</option>
-                  <option value="Beach Tennis">🎾 Beach Tennis</option>
-                  <option value="Vôlei de Quadra">👟 Vôlei de Quadra</option>
+                  {sports.map((s) => (
+                    <option key={s.id} value={s.name}>
+                      🏆 {s.name}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="relative">
