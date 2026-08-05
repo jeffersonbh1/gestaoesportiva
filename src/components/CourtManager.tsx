@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Court, CourtType, CourtStatus, RentalType, Teacher, Student, SportType } from '../types';
-import { INITIAL_RENTAL_TYPES, INITIAL_TEACHERS, INITIAL_STUDENTS } from '../data/mockData';
+import { Court, CourtType, CourtStatus, RentalType, Teacher, Student, SportType, Sport, CourtTypeItem } from '../types';
+import { INITIAL_RENTAL_TYPES, INITIAL_TEACHERS, INITIAL_STUDENTS, INITIAL_SPORTS, INITIAL_COURT_TYPES } from '../data/mockData';
 import { formatCurrency, formatPhoneNumber } from '../utils';
 import { 
   Plus, 
@@ -20,7 +20,10 @@ import {
   Mail,
   Tag,
   Check,
-  BookOpen
+  BookOpen,
+  Layers,
+  Pencil,
+  Trophy
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -32,6 +35,14 @@ interface CourtManagerProps {
   rentalTypes?: RentalType[];
   onAddRentalType?: (item: RentalType) => void;
   onDeleteRentalType?: (id: string) => void;
+  sports?: Sport[];
+  onAddSport?: (sport: Sport) => void;
+  onSaveSport?: (sport: Sport) => void;
+  onDeleteSport?: (id: string, name?: string) => void;
+  courtTypes?: CourtTypeItem[];
+  onAddCourtType?: (item: CourtTypeItem) => void;
+  onSaveCourtType?: (item: CourtTypeItem) => void;
+  onDeleteCourtType?: (id: string, name?: string) => void;
   teachers?: Teacher[];
   onAddTeacher?: (teacher: Teacher) => void;
   onDeleteTeacher?: (id: string) => void;
@@ -49,6 +60,14 @@ export default function CourtManager({
   rentalTypes = INITIAL_RENTAL_TYPES,
   onAddRentalType,
   onDeleteRentalType,
+  sports = INITIAL_SPORTS,
+  onAddSport,
+  onSaveSport,
+  onDeleteSport,
+  courtTypes = INITIAL_COURT_TYPES,
+  onAddCourtType,
+  onSaveCourtType,
+  onDeleteCourtType,
   teachers = INITIAL_TEACHERS,
   onAddTeacher,
   onDeleteTeacher,
@@ -71,6 +90,8 @@ export default function CourtManager({
   const [confirmDelRentalId, setConfirmDelRentalId] = useState<string | null>(null);
   const [confirmDelTeacherId, setConfirmDelTeacherId] = useState<string | null>(null);
   const [confirmDelStudentId, setConfirmDelStudentId] = useState<string | null>(null);
+  const [confirmDelSportId, setConfirmDelSportId] = useState<string | null>(null);
+  const [confirmDelCourtTypeId, setConfirmDelCourtTypeId] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,7 +118,19 @@ export default function CourtManager({
   };
 
   // Submenu Navigation State
-  const [activeSubTab, setActiveSubTab] = useState<'quadras' | 'tipos_aluguel' | 'professores' | 'alunos'>('quadras');
+  const [activeSubTab, setActiveSubTab] = useState<'quadras' | 'esportes' | 'tipos_quadra' | 'tipos_aluguel' | 'professores' | 'alunos'>('quadras');
+
+  // Sport form state (Create/Edit)
+  const [showAddSportForm, setShowAddSportForm] = useState(false);
+  const [editingSport, setEditingSport] = useState<Sport | null>(null);
+  const [sportName, setSportName] = useState('');
+  const [sportDescription, setSportDescription] = useState('');
+
+  // CourtType form state (Create/Edit)
+  const [showAddCourtTypeForm, setShowAddCourtTypeForm] = useState(false);
+  const [editingCourtType, setEditingCourtType] = useState<CourtTypeItem | null>(null);
+  const [courtTypeName, setCourtTypeName] = useState('');
+  const [courtTypeDescription, setCourtTypeDescription] = useState('');
 
   // New RentalType form state
   const [showAddRentalTypeForm, setShowAddRentalTypeForm] = useState(false);
@@ -137,6 +170,68 @@ export default function CourtManager({
     setRentalName('');
     setRentalDescription('');
     setShowAddRentalTypeForm(false);
+  };
+
+  const handleSaveSportSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sportName.trim()) return;
+
+    if (editingSport) {
+      const updated: Sport = {
+        ...editingSport,
+        name: sportName.trim(),
+        description: sportDescription.trim() || undefined
+      };
+      if (onSaveSport) {
+        onSaveSport(updated);
+      } else {
+        onAddSport?.(updated);
+      }
+    } else {
+      const newSport: Sport = {
+        id: `sport-${Date.now()}`,
+        name: sportName.trim(),
+        description: sportDescription.trim() || undefined,
+        active: true
+      };
+      onAddSport?.(newSport);
+    }
+
+    setSportName('');
+    setSportDescription('');
+    setEditingSport(null);
+    setShowAddSportForm(false);
+  };
+
+  const handleSaveCourtTypeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!courtTypeName.trim()) return;
+
+    if (editingCourtType) {
+      const updated: CourtTypeItem = {
+        ...editingCourtType,
+        name: courtTypeName.trim(),
+        description: courtTypeDescription.trim() || undefined
+      };
+      if (onSaveCourtType) {
+        onSaveCourtType(updated);
+      } else {
+        onAddCourtType?.(updated);
+      }
+    } else {
+      const newType: CourtTypeItem = {
+        id: `type-${Date.now()}`,
+        name: courtTypeName.trim(),
+        description: courtTypeDescription.trim() || undefined,
+        active: true
+      };
+      onAddCourtType?.(newType);
+    }
+
+    setCourtTypeName('');
+    setCourtTypeDescription('');
+    setEditingCourtType(null);
+    setShowAddCourtTypeForm(false);
   };
 
   const handleCreateTeacher = (e: React.FormEvent) => {
@@ -202,6 +297,34 @@ export default function CourtManager({
           Quadras Esportivas
         </button>
         <button
+          onClick={() => setActiveSubTab('esportes')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+            activeSubTab === 'esportes'
+              ? 'bg-slate-900 text-white shadow-sm'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Trophy className="h-4 w-4 text-amber-500" />
+          Esportes
+          <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-200/50 font-mono">
+            {sports.length}
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveSubTab('tipos_quadra')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+            activeSubTab === 'tipos_quadra'
+              ? 'bg-slate-900 text-white shadow-sm'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Layers className="h-4 w-4 text-blue-500" />
+          Tipos de Quadra
+          <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-200/50 font-mono">
+            {courtTypes.length}
+          </span>
+        </button>
+        <button
           onClick={() => setActiveSubTab('tipos_aluguel')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
             activeSubTab === 'tipos_aluguel'
@@ -209,7 +332,7 @@ export default function CourtManager({
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          <FileText className="h-4 w-4" />
+          <FileText className="h-4 w-4 text-emerald-500" />
           Tipos de Aluguel
           <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-200/50 font-mono">
             {rentalTypes.length}
@@ -306,10 +429,11 @@ export default function CourtManager({
                   onChange={(e) => setType(e.target.value as CourtType)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer font-semibold text-slate-700"
                 >
-                  <option value="Areia">🌴 Areia Praia</option>
-                  <option value="Coberta">🏠 Coberta</option>
-                  <option value="Saibro">🥎 Saibro</option>
-                  <option value="Poliesportiva">👟 Poliesportiva</option>
+                  {courtTypes.map((ct) => (
+                    <option key={ct.id} value={ct.name}>
+                      🏟️ {ct.name}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -460,7 +584,323 @@ export default function CourtManager({
         </div>
       )}
 
-      {/* 2. TIPOS DE ALUGUEL SUBTAB */}
+      {/* 2. ESPORTES SUBTAB */}
+      {activeSubTab === 'esportes' && (
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <div>
+              <h3 className="font-bold text-slate-900 flex items-center gap-1.5 tracking-tight">
+                <Trophy className="h-5 w-5 text-amber-500" />
+                Cadastro & Edição de Esportes
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                Cadastre e edite as modalidades esportivas praticadas na arena (ex: Vôlei de Areia, Futevôlei, Beach Tennis).
+              </p>
+            </div>
+            {isAdmin ? (
+              <button
+                onClick={() => {
+                  setEditingSport(null);
+                  setSportName('');
+                  setSportDescription('');
+                  setShowAddSportForm(!showAddSportForm);
+                }}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition flex items-center gap-2 cursor-pointer shadow-sm"
+              >
+                <Plus className="h-4 w-4" />
+                {showAddSportForm ? 'Fechar Form' : 'Novo Esporte'}
+              </button>
+            ) : (
+              <div className="bg-slate-50 border border-slate-200 text-slate-500 px-3.5 py-1.5 rounded-xl text-[10px] font-bold">
+                Visualização de Leitura
+              </div>
+            )}
+          </div>
+
+          {/* Form Create/Edit */}
+          {showAddSportForm && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm max-w-2xl"
+            >
+              <h4 className="font-bold text-slate-950 mb-4 text-xs uppercase tracking-wider">
+                {editingSport ? 'Editar Esporte' : 'Cadastrar Novo Esporte'}
+              </h4>
+              <form onSubmit={handleSaveSportSubmit} className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 block mb-1">Nome do Esporte *</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Futevôlei, Pickleball, Beach Tennis"
+                    value={sportName}
+                    onChange={(e) => setSportName(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-semibold text-slate-800"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 block mb-1">Descrição / Detalhes (Opcional)</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Regulamento oficial, altura da rede 2,20m..."
+                    value={sportDescription}
+                    onChange={(e) => setSportDescription(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium text-slate-700"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddSportForm(false);
+                      setEditingSport(null);
+                    }}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+                  >
+                    {editingSport ? 'Salvar Alterações' : 'Cadastrar Esporte'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          )}
+
+          {/* List of Sports */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {sports.map((item) => (
+              <div
+                key={item.id}
+                className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between hover:border-slate-300 transition"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                      <Trophy className="h-4 w-4 text-amber-500 shrink-0" />
+                      {item.name}
+                    </span>
+                    <span className="text-[9px] px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-100">
+                      Ativo
+                    </span>
+                  </div>
+                  {item.description ? (
+                    <p className="text-xs text-slate-500 font-medium mt-1">{item.description}</p>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic mt-1">Sem descrição cadastrada</p>
+                  )}
+                </div>
+
+                {isAdmin && (
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                    <button
+                      onClick={() => {
+                        setEditingSport(item);
+                        setSportName(item.name);
+                        setSportDescription(item.description || '');
+                        setShowAddSportForm(true);
+                      }}
+                      className="px-2.5 py-1.5 bg-slate-50 hover:bg-blue-50 text-slate-600 hover:text-blue-600 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                      title="Editar esporte"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      Editar
+                    </button>
+
+                    {confirmDelSportId === item.id ? (
+                      <button
+                        onClick={() => {
+                          onDeleteSport?.(item.id, item.name);
+                          setConfirmDelSportId(null);
+                        }}
+                        className="px-2.5 py-1.5 bg-rose-600 text-white hover:bg-rose-700 rounded-lg text-xs font-bold transition cursor-pointer"
+                      >
+                        Confirmar
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setConfirmDelSportId(item.id);
+                          setTimeout(() => setConfirmDelSportId(null), 4000);
+                        }}
+                        className="p-1.5 bg-slate-50 hover:bg-rose-50 hover:text-rose-600 rounded-lg text-slate-400 transition cursor-pointer"
+                        title="Excluir esporte"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 3. TIPOS DE QUADRA SUBTAB */}
+      {activeSubTab === 'tipos_quadra' && (
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <div>
+              <h3 className="font-bold text-slate-900 flex items-center gap-1.5 tracking-tight">
+                <Layers className="h-5 w-5 text-blue-500" />
+                Cadastro & Edição de Tipos de Quadra
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                Gerencie os tipos e superfícies das quadras (ex: Areia, Saibro, Coberta, Poliesportiva, Sintética).
+              </p>
+            </div>
+            {isAdmin ? (
+              <button
+                onClick={() => {
+                  setEditingCourtType(null);
+                  setCourtTypeName('');
+                  setCourtTypeDescription('');
+                  setShowAddCourtTypeForm(!showAddCourtTypeForm);
+                }}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition flex items-center gap-2 cursor-pointer shadow-sm"
+              >
+                <Plus className="h-4 w-4" />
+                {showAddCourtTypeForm ? 'Fechar Form' : 'Novo Tipo de Quadra'}
+              </button>
+            ) : (
+              <div className="bg-slate-50 border border-slate-200 text-slate-500 px-3.5 py-1.5 rounded-xl text-[10px] font-bold">
+                Visualização de Leitura
+              </div>
+            )}
+          </div>
+
+          {/* Form Create/Edit */}
+          {showAddCourtTypeForm && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm max-w-2xl"
+            >
+              <h4 className="font-bold text-slate-950 mb-4 text-xs uppercase tracking-wider">
+                {editingCourtType ? 'Editar Tipo de Quadra' : 'Cadastrar Novo Tipo de Quadra'}
+              </h4>
+              <form onSubmit={handleSaveCourtTypeSubmit} className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 block mb-1">Nome do Tipo *</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Saibro, Sintética, Grama, Coberta"
+                    value={courtTypeName}
+                    onChange={(e) => setCourtTypeName(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-semibold text-slate-800"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 block mb-1">Descrição / Detalhes (Opcional)</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Piso sintético amortecido para esportes em geral..."
+                    value={courtTypeDescription}
+                    onChange={(e) => setCourtTypeDescription(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium text-slate-700"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddCourtTypeForm(false);
+                      setEditingCourtType(null);
+                    }}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+                  >
+                    {editingCourtType ? 'Salvar Alterações' : 'Cadastrar Tipo'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          )}
+
+          {/* List of Court Types */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {courtTypes.map((item) => (
+              <div
+                key={item.id}
+                className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between hover:border-slate-300 transition"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                      <Layers className="h-4 w-4 text-blue-500 shrink-0" />
+                      {item.name}
+                    </span>
+                    <span className="text-[9px] px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-100">
+                      Superfície
+                    </span>
+                  </div>
+                  {item.description ? (
+                    <p className="text-xs text-slate-500 font-medium mt-1">{item.description}</p>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic mt-1">Sem descrição cadastrada</p>
+                  )}
+                </div>
+
+                {isAdmin && (
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                    <button
+                      onClick={() => {
+                        setEditingCourtType(item);
+                        setCourtTypeName(item.name);
+                        setCourtTypeDescription(item.description || '');
+                        setShowAddCourtTypeForm(true);
+                      }}
+                      className="px-2.5 py-1.5 bg-slate-50 hover:bg-blue-50 text-slate-600 hover:text-blue-600 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                      title="Editar tipo de quadra"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      Editar
+                    </button>
+
+                    {confirmDelCourtTypeId === item.id ? (
+                      <button
+                        onClick={() => {
+                          onDeleteCourtType?.(item.id, item.name);
+                          setConfirmDelCourtTypeId(null);
+                        }}
+                        className="px-2.5 py-1.5 bg-rose-600 text-white hover:bg-rose-700 rounded-lg text-xs font-bold transition cursor-pointer"
+                      >
+                        Confirmar
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setConfirmDelCourtTypeId(item.id);
+                          setTimeout(() => setConfirmDelCourtTypeId(null), 4000);
+                        }}
+                        className="p-1.5 bg-slate-50 hover:bg-rose-50 hover:text-rose-600 rounded-lg text-slate-400 transition cursor-pointer"
+                        title="Excluir tipo de quadra"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 4. TIPOS DE ALUGUEL SUBTAB */}
       {activeSubTab === 'tipos_aluguel' && (
         <div className="space-y-6">
           {/* Header */}

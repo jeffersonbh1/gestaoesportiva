@@ -66,8 +66,29 @@ export default function BookingModal({
   
   // Real-time calculated price
   const [totalValue, setTotalValue] = useState(0);
+  const [formattedValue, setFormattedValue] = useState('0,00');
   const [isCustomPrice, setIsCustomPrice] = useState(false);
   const [overlapWarning, setOverlapWarning] = useState<string | null>(null);
+
+  // Keep formattedValue in sync with totalValue
+  useEffect(() => {
+    setFormattedValue(totalValue.toFixed(2).replace('.', ','));
+  }, [totalValue]);
+
+  const handleCurrencyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value;
+    const digits = rawVal.replace(/\D/g, '');
+    if (!digits) {
+      setFormattedValue('0,00');
+      setTotalValue(0);
+      setIsCustomPrice(true);
+      return;
+    }
+    const numeric = parseFloat(digits) / 100;
+    setFormattedValue(numeric.toFixed(2).replace('.', ','));
+    setTotalValue(numeric);
+    setIsCustomPrice(true);
+  };
 
   // Safe delete state instead of native confirm()
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -458,17 +479,13 @@ export default function BookingModal({
               <div className="flex items-center gap-1.5">
                 <span className="text-sm font-bold text-slate-500">R$</span>
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={totalValue}
-                  onChange={(e) => {
-                    setTotalValue(Math.max(0, Number(e.target.value)));
-                    setIsCustomPrice(true);
-                  }}
+                  type="text"
+                  inputMode="numeric"
+                  value={formattedValue}
+                  onChange={handleCurrencyChange}
                   className="w-28 text-right text-base font-black text-slate-900 bg-white border border-slate-300 rounded-xl px-2.5 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-2xs font-mono"
-                  placeholder="0.00"
-                  title="Valor do aluguel (clique para editar)"
+                  placeholder="00,00"
+                  title="Valor do aluguel (mascara 00,00)"
                 />
               </div>
             </div>

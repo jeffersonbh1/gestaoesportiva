@@ -1,4 +1,18 @@
-import { Court, Booking, RentalType, Teacher, Student } from '../types';
+import { Court, Booking, RentalType, Teacher, Student, Sport, CourtTypeItem } from '../types';
+
+export const INITIAL_SPORTS: Sport[] = [
+  { id: 'sport-1', name: 'Vôlei de Areia', description: 'Vôlei praticado em quadras de areia', active: true },
+  { id: 'sport-2', name: 'Futevôlei', description: 'Modalidade tradicional de futevôlei', active: true },
+  { id: 'sport-3', name: 'Beach Tennis', description: 'Tênis praticado na areia', active: true },
+  { id: 'sport-4', name: 'Vôlei de Quadra', description: 'Vôlei tradicional em quadra coberta ou poliesportiva', active: true },
+];
+
+export const INITIAL_COURT_TYPES: CourtTypeItem[] = [
+  { id: 'type-1', name: 'Areia', description: 'Quadra de areia fina', active: true },
+  { id: 'type-2', name: 'Poliesportiva', description: 'Quadra rápida multiuso', active: true },
+  { id: 'type-3', name: 'Saibro', description: 'Quadra de saibro', active: true },
+  { id: 'type-4', name: 'Coberta', description: 'Quadra coberta com proteção termoacústica', active: true },
+];
 
 export const INITIAL_COURTS: Court[] = [
   {

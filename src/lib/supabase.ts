@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Court, Booking, User, Player, PlayerRating } from '../types';
+import { Court, Booking, User, Player, PlayerRating, Sport, CourtTypeItem } from '../types';
 
 const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
 const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
@@ -452,6 +452,154 @@ export async function dbSaveRating(rating: PlayerRating): Promise<void> {
 
   if (error) {
     console.error('Erro ao salvar avaliação no Supabase:', error);
+    throw error;
+  }
+}
+
+// ====================================================================
+// ESPORTES (tabela: esportes)
+// ====================================================================
+
+export async function dbGetSports(): Promise<Sport[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from('esportes')
+    .select('*')
+    .order('nome', { ascending: true });
+
+  if (error) {
+    console.error('Erro ao buscar esportes do Supabase:', error);
+    return [];
+  }
+
+  return (data || []).map((s) => ({
+    id: s.id,
+    name: s.nome,
+    description: s.descricao || undefined,
+    active: s.ativo ?? true,
+  }));
+}
+
+export async function dbSaveSport(sport: Sport): Promise<Sport | null> {
+  if (!supabase) return null;
+
+  const dbSport: any = {
+    nome: sport.name,
+    descricao: sport.description || null,
+    ativo: sport.active ?? true,
+  };
+
+  if (isValidUuid(sport.id)) {
+    dbSport.id = sport.id;
+  }
+
+  const { data, error } = await supabase
+    .from('esportes')
+    .upsert(dbSport, { onConflict: 'nome' })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Erro ao salvar esporte no Supabase:', error);
+    throw error;
+  }
+
+  if (data) {
+    return {
+      id: data.id,
+      name: data.nome,
+      description: data.descricao || undefined,
+      active: data.ativo ?? true,
+    };
+  }
+
+  return null;
+}
+
+export async function dbDeleteSport(sportId: string, sportName?: string): Promise<void> {
+  if (!supabase) return;
+
+  const query = supabase.from('esportes').delete();
+  const { error } = isValidUuid(sportId)
+    ? await query.eq('id', sportId)
+    : await query.eq('nome', sportName || sportId);
+
+  if (error) {
+    console.error('Erro ao deletar esporte do Supabase:', error);
+    throw error;
+  }
+}
+
+// ====================================================================
+// TIPOS DE QUADRA (tabela: tipos_quadra)
+// ====================================================================
+
+export async function dbGetCourtTypes(): Promise<CourtTypeItem[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from('tipos_quadra')
+    .select('*')
+    .order('nome', { ascending: true });
+
+  if (error) {
+    console.error('Erro ao buscar tipos de quadra do Supabase:', error);
+    return [];
+  }
+
+  return (data || []).map((t) => ({
+    id: t.id,
+    name: t.nome,
+    description: t.descricao || undefined,
+    active: t.ativo ?? true,
+  }));
+}
+
+export async function dbSaveCourtType(courtType: CourtTypeItem): Promise<CourtTypeItem | null> {
+  if (!supabase) return null;
+
+  const dbType: any = {
+    nome: courtType.name,
+    descricao: courtType.description || null,
+    ativo: courtType.active ?? true,
+  };
+
+  if (isValidUuid(courtType.id)) {
+    dbType.id = courtType.id;
+  }
+
+  const { data, error } = await supabase
+    .from('tipos_quadra')
+    .upsert(dbType, { onConflict: 'nome' })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Erro ao salvar tipo de quadra no Supabase:', error);
+    throw error;
+  }
+
+  if (data) {
+    return {
+      id: data.id,
+      name: data.nome,
+      description: data.descricao || undefined,
+      active: data.ativo ?? true,
+    };
+  }
+
+  return null;
+}
+
+export async function dbDeleteCourtType(courtTypeId: string, courtTypeName?: string): Promise<void> {
+  if (!supabase) return;
+
+  const query = supabase.from('tipos_quadra').delete();
+  const { error } = isValidUuid(courtTypeId)
+    ? await query.eq('id', courtTypeId)
+    : await query.eq('nome', courtTypeName || courtTypeId);
+
+  if (error) {
+    console.error('Erro ao deletar tipo de quadra do Supabase:', error);
     throw error;
   }
 }

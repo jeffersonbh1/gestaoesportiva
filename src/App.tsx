@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Court, Booking, CourtStatus, PaymentStatus, User, RentalType, Teacher, Student } from './types';
-import { INITIAL_COURTS, getInitialBookings, INITIAL_RENTAL_TYPES, INITIAL_TEACHERS, INITIAL_STUDENTS } from './data/mockData';
+import { Court, Booking, CourtStatus, PaymentStatus, User, RentalType, Teacher, Student, Sport, CourtTypeItem } from './types';
+import { INITIAL_COURTS, getInitialBookings, INITIAL_RENTAL_TYPES, INITIAL_TEACHERS, INITIAL_STUDENTS, INITIAL_SPORTS, INITIAL_COURT_TYPES } from './data/mockData';
 import { 
   isSupabaseConfigured,
   dbGetUsers,
@@ -11,7 +11,13 @@ import {
   dbDeleteCourt,
   dbGetBookings,
   dbSaveBooking,
-  dbDeleteBooking
+  dbDeleteBooking,
+  dbGetSports,
+  dbSaveSport,
+  dbDeleteSport,
+  dbGetCourtTypes,
+  dbSaveCourtType,
+  dbDeleteCourtType
 } from './lib/supabase';
 import Dashboard from './components/Dashboard';
 import CourtGrid from './components/CourtGrid';
@@ -101,8 +107,26 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_STUDENTS;
   });
 
-  // Base mock date set to '2026-07-07' to match the preset statistics perfectly
-  const [selectedDate, setSelectedDate] = useState('2026-07-07');
+  const [sports, setSports] = useState<Sport[]>(() => {
+    const saved = localStorage.getItem('arena_sports');
+    return saved ? JSON.parse(saved) : INITIAL_SPORTS;
+  });
+
+  const [courtTypes, setCourtTypes] = useState<CourtTypeItem[]>(() => {
+    const saved = localStorage.getItem('arena_court_types');
+    return saved ? JSON.parse(saved) : INITIAL_COURT_TYPES;
+  });
+
+  // Data atual carregada por padrão ao entrar no sistema
+  const getTodayDate = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const [selectedDate, setSelectedDate] = useState(getTodayDate);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -122,20 +146,19 @@ export default function App() {
       try {
         setDbLoading(true);
         setDbError(null);
-        const [dbUsers, dbCourts, dbBookings] = await Promise.all([
+        const [dbUsers, dbCourts, dbBookings, dbSports, dbCourtTypes] = await Promise.all([
           dbGetUsers(),
           dbGetCourts(),
-          dbGetBookings()
+          dbGetBookings(),
+          dbGetSports(),
+          dbGetCourtTypes()
         ]);
         
-        if (dbUsers.length > 0) {
-          setUsers(dbUsers);
-        }
-        if (dbCourts.length > 0) {
-          setCourts(dbCourts);
-        }
-        // Atualiza a lista de agendamentos com o que veio do banco
+        if (dbUsers.length > 0) setUsers(dbUsers);
+        if (dbCourts.length > 0) setCourts(dbCourts);
         setBookings(dbBookings);
+        if (dbSports.length > 0) setSports(dbSports);
+        if (dbCourtTypes.length > 0) setCourtTypes(dbCourtTypes);
       } catch (err: any) {
         console.error("Erro ao carregar dados do Supabase:", err);
         setDbError(`Erro ao carregar do Supabase: ${err.message || 'Verifique se executou o script SQL'}`);
@@ -178,6 +201,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('arena_students', JSON.stringify(students));
   }, [students]);
+
+  useEffect(() => {
+    localStorage.setItem('arena_sports', JSON.stringify(sports));
+  }, [sports]);
+
+  useEffect(() => {
+    localStorage.setItem('arena_court_types', JSON.stringify(courtTypes));
+  }, [courtTypes]);
 
   // Handlers for user management actions
   const handleSaveUser = async (user: User) => {
@@ -354,6 +385,76 @@ export default function App() {
 
   const handleDeleteStudent = (id: string) => {
     setStudents((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const handleSaveSport = async (sport: Sport) => {
+    setSports((prev) => {
+      const exists = prev.some((s) => s.id === sport.id);
+      if (exists) {
+        return prev.map((s) => (s.id === sport.id ? sport : s));
+      }
+      return [...prev, sport];
+    });
+
+    if (isSupabaseConfigured) {
+      try {
+        await dbSaveSport(sport);
+        const updated = await dbGetSports();
+        if (updated.length > 0) setSports(updated);
+        setDbError(null);
+      } catch (err: any) {
+        console.error("Erro ao salvar esporte no Supabase:", err);
+        setDbError(`Erro ao salvar esporte no Supabase: ${err.message || 'Erro desconhecido'}`);
+      }
+    }
+  };
+
+  const handleDeleteSport = async (id: string, name?: string) => {
+    setSports((prev) => prev.filter((s) => s.id !== id));
+    if (isSupabaseConfigured) {
+      try {
+        await dbDeleteSport(id, name);
+        setDbError(null);
+      } catch (err: any) {
+        console.error("Erro ao excluir esporte no Supabase:", err);
+        setDbError(`Erro ao excluir esporte no Supabase: ${err.message || 'Erro desconhecido'}`);
+      }
+    }
+  };
+
+  const handleSaveCourtType = async (item: CourtTypeItem) => {
+    setCourtTypes((prev) => {
+      const exists = prev.some((c) => c.id === item.id);
+      if (exists) {
+        return prev.map((c) => (c.id === item.id ? item : c));
+      }
+      return [...prev, item];
+    });
+
+    if (isSupabaseConfigured) {
+      try {
+        await dbSaveCourtType(item);
+        const updated = await dbGetCourtTypes();
+        if (updated.length > 0) setCourtTypes(updated);
+        setDbError(null);
+      } catch (err: any) {
+        console.error("Erro ao salvar tipo de quadra no Supabase:", err);
+        setDbError(`Erro ao salvar tipo de quadra no Supabase: ${err.message || 'Erro desconhecido'}`);
+      }
+    }
+  };
+
+  const handleDeleteCourtType = async (id: string, name?: string) => {
+    setCourtTypes((prev) => prev.filter((c) => c.id !== id));
+    if (isSupabaseConfigured) {
+      try {
+        await dbDeleteCourtType(id, name);
+        setDbError(null);
+      } catch (err: any) {
+        console.error("Erro ao excluir tipo de quadra no Supabase:", err);
+        setDbError(`Erro ao excluir tipo de quadra no Supabase: ${err.message || 'Erro desconhecido'}`);
+      }
+    }
   };
 
   // Direct trigger when clicking an empty hour slot
@@ -717,6 +818,14 @@ export default function App() {
                 rentalTypes={rentalTypes}
                 onAddRentalType={handleAddRentalType}
                 onDeleteRentalType={handleDeleteRentalType}
+                sports={sports}
+                onAddSport={handleSaveSport}
+                onSaveSport={handleSaveSport}
+                onDeleteSport={handleDeleteSport}
+                courtTypes={courtTypes}
+                onAddCourtType={handleSaveCourtType}
+                onSaveCourtType={handleSaveCourtType}
+                onDeleteCourtType={handleDeleteCourtType}
                 teachers={teachers}
                 onAddTeacher={handleAddTeacher}
                 onDeleteTeacher={handleDeleteTeacher}

@@ -33,7 +33,7 @@ COMMENT ON COLUMN usuarios.perfil IS 'Perfil de permissão: Administrador (acess
 CREATE TABLE IF NOT EXISTS quadras (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     nome VARCHAR(100) NOT NULL,
-    tipo VARCHAR(30) NOT NULL CHECK (tipo IN ('Areia', 'Poliesportiva', 'Saibro', 'Coberta')),
+    tipo VARCHAR(50) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'Disponível' CHECK (status IN ('Disponível', 'Ocupada', 'Manutenção')),
     preco_por_hora NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
     descricao TEXT,
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS agendamentos (
     data DATE NOT NULL,
     horario_inicio TIME NOT NULL,
     horario_fim TIME NOT NULL,
-    esporte VARCHAR(40) NOT NULL CHECK (esporte IN ('Vôlei de Areia', 'Futevôlei', 'Vôlei de Quadra', 'Beach Tennis')),
+    esporte VARCHAR(50) NOT NULL,
     tipo_agendamento VARCHAR(50) DEFAULT 'Aluguel',
     valor_total NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
     status_pagamento VARCHAR(20) NOT NULL DEFAULT 'Pendente' CHECK (status_pagamento IN ('Pago', 'Pendente', 'Reembolsado')),
@@ -69,12 +69,42 @@ CREATE TABLE IF NOT EXISTS agendamentos (
 -- Garantir coluna tipo_agendamento se a tabela já existir
 ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS tipo_agendamento VARCHAR(50) DEFAULT 'Aluguel';
 
+-- ====================================================================
+-- 3B. TABELA: esportes
+-- Funcionalidade: Cadastro e Edição de Esportes
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS esportes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nome VARCHAR(100) NOT NULL UNIQUE,
+    descricao TEXT,
+    ativo BOOLEAN NOT NULL DEFAULT TRUE,
+    criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE esportes IS 'Tabela de cadastro e gestão dos esportes disponíveis na arena.';
+
+-- ====================================================================
+-- 3C. TABELA: tipos_quadra
+-- Funcionalidade: Cadastro e Edição de Tipos e Superfícies de Quadra
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS tipos_quadra (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nome VARCHAR(100) NOT NULL UNIQUE,
+    descricao TEXT,
+    ativo BOOLEAN NOT NULL DEFAULT TRUE,
+    criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE tipos_quadra IS 'Tabela de cadastro e gestão dos tipos de quadra (ex: Areia, Saibro, Coberta, Poliesportiva).';
+
 -- Desabilitar RLS (Row Level Security) para permitir leitura e gravação com a chave pública/anon
 ALTER TABLE usuarios DISABLE ROW LEVEL SECURITY;
 ALTER TABLE quadras DISABLE ROW LEVEL SECURITY;
 ALTER TABLE agendamentos DISABLE ROW LEVEL SECURITY;
 ALTER TABLE jogadores_racha DISABLE ROW LEVEL SECURITY;
 ALTER TABLE avaliacoes_jogadores DISABLE ROW LEVEL SECURITY;
+ALTER TABLE esportes DISABLE ROW LEVEL SECURITY;
+ALTER TABLE tipos_quadra DISABLE ROW LEVEL SECURITY;
 
 CREATE INDEX IF NOT EXISTS idx_agendamentos_data ON agendamentos(data);
 CREATE INDEX IF NOT EXISTS idx_agendamentos_quadra ON agendamentos(quadra_id);
@@ -169,4 +199,23 @@ VALUES
 ('a0000000-0000-0000-0000-000000000001', 'Rodrigo Silva', 'Matheus Santos', 5),
 ('a0000000-0000-0000-0000-000000000001', 'Rodrigo Silva', 'Pedro Ramos', 4)
 ON CONFLICT (agendamento_id, avaliador_nome, jogador_avaliado_nome) DO NOTHING;
+
+-- 6. Inserir Esportes Iniciais
+INSERT INTO esportes (nome, descricao)
+VALUES 
+('Vôlei de Areia', 'Vôlei praticado em quadras de areia'),
+('Futevôlei', 'Modalidade tradicional de futevôlei'),
+('Beach Tennis', 'Tênis praticado na areia'),
+('Vôlei de Quadra', 'Vôlei tradicional em quadra coberta ou poliesportiva')
+ON CONFLICT (nome) DO NOTHING;
+
+-- 7. Inserir Tipos de Quadra Iniciais
+INSERT INTO tipos_quadra (nome, descricao)
+VALUES 
+('Areia', 'Quadra de areia fina'),
+('Poliesportiva', 'Quadra rápida multiuso'),
+('Saibro', 'Quadra com piso de saibro'),
+('Coberta', 'Quadra com estrutura e cobertura termoacústica')
+ON CONFLICT (nome) DO NOTHING;
+
 

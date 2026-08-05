@@ -1,10 +1,24 @@
-export type CourtType = 'Areia' | 'Poliesportiva' | 'Saibro' | 'Coberta';
+export type CourtType = 'Areia' | 'Poliesportiva' | 'Saibro' | 'Coberta' | string;
 export type CourtStatus = 'Disponível' | 'Ocupada' | 'Manutenção';
 export type PaymentStatus = 'Pago' | 'Pendente' | 'Reembolsado';
 export type PaymentMethod = 'Pix' | 'Cartão de Crédito' | 'Cartão de Débito' | 'Dinheiro';
-export type SportType = 'Vôlei de Areia' | 'Futevôlei' | 'Vôlei de Quadra' | 'Beach Tennis';
+export type SportType = 'Vôlei de Areia' | 'Futevôlei' | 'Vôlei de Quadra' | 'Beach Tennis' | string;
 export type BookingType = 'Aluguel' | 'Day-use' | 'Aula de futevôlei' | 'Aula de beach tennis' | 'Eventos' | string;
 export type UserRole = 'Administrador' | 'Usuário';
+
+export interface Sport {
+  id: string;
+  name: string;
+  description?: string;
+  active?: boolean;
+}
+
+export interface CourtTypeItem {
+  id: string;
+  name: string;
+  description?: string;
+  active?: boolean;
+}
 
 export interface User {
   id: string;
