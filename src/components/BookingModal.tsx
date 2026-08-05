@@ -453,7 +453,7 @@ export default function BookingModal({
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-2xs"
                 >
                   <option value="">-- Selecione o Professor --</option>
-                  {teachers.map((t) => (
+                  {Array.from(new Map(teachers.map((t) => [t.name.trim().toLowerCase(), t])).values()).map((t) => (
                     <option key={t.id} value={t.id}>
                       👨‍🏫 {t.name} ({t.sport})
                     </option>
@@ -482,7 +482,7 @@ export default function BookingModal({
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-2xs"
                   >
                     <option value="">+ Selecionar Aluno Cadastrado...</option>
-                    {students.map((s) => (
+                    {Array.from(new Map(students.map((s) => [s.name.trim().toLowerCase(), s])).values()).map((s) => (
                       <option key={s.id} value={s.id}>
                         🎓 {s.name} ({s.sport} - {s.level})
                       </option>

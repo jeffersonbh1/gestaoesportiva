@@ -124,15 +124,27 @@ async function ensureTeacherUuid(teacherId?: string, teacherName?: string, sport
   const simpleName = cleanName.replace(/^(prof\.|profa\.|professor|professora)\s+/i, '').trim();
 
   try {
-    // 1. Tenta buscar pelo nome na tabela professores (nome exato ou sem prefixo Prof.)
+    // 1. Tenta buscar pelo nome simples ou limpo na tabela professores usando ilike
     const { data } = await supabase
       .from('professores')
       .select('id, nome')
-      .or(`nome.ilike.${cleanName},nome.ilike.%${simpleName}%`)
+      .ilike('nome', `%${simpleName}%`)
       .limit(1);
 
     if (data && data.length > 0) {
       return data[0].id;
+    }
+
+    if (simpleName !== cleanName) {
+      const { data: dataClean } = await supabase
+        .from('professores')
+        .select('id, nome')
+        .ilike('nome', `%${cleanName}%`)
+        .limit(1);
+
+      if (dataClean && dataClean.length > 0) {
+        return dataClean[0].id;
+      }
     }
 
     // 2. Se não encontrou, insere novo professor na tabela professores para obter UUID
@@ -255,7 +267,7 @@ export async function dbGetTeachers(): Promise<Teacher[]> {
       }
     }
 
-    return (data || []).map((p) => ({
+    const mappedList = (data || []).map((p) => ({
       id: p.id,
       name: p.nome,
       phone: p.telefone || '',
@@ -265,6 +277,15 @@ export async function dbGetTeachers(): Promise<Teacher[]> {
       status: p.status || 'Ativo',
       notes: p.observacoes || undefined,
     }));
+
+    const uniqueMap = new Map<string, Teacher>();
+    for (const t of mappedList) {
+      const key = t.name.trim().toLowerCase();
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, t);
+      }
+    }
+    return Array.from(uniqueMap.values());
   } catch (err) {
     console.warn('Erro ao buscar professores:', err);
     return [];
@@ -359,7 +380,7 @@ export async function dbGetStudents(): Promise<Student[]> {
       }
     }
 
-    return (data || []).map((a) => ({
+    const mappedStudents = (data || []).map((a) => ({
       id: a.id,
       name: a.nome,
       phone: a.telefone || '',
@@ -370,6 +391,15 @@ export async function dbGetStudents(): Promise<Student[]> {
       status: a.status || 'Ativo',
       notes: a.observacoes || undefined,
     }));
+
+    const uniqueStudentMap = new Map<string, Student>();
+    for (const st of mappedStudents) {
+      const key = st.name.trim().toLowerCase();
+      if (!uniqueStudentMap.has(key)) {
+        uniqueStudentMap.set(key, st);
+      }
+    }
+    return Array.from(uniqueStudentMap.values());
   } catch (err) {
     console.warn('Erro ao buscar alunos:', err);
     return [];

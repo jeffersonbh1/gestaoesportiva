@@ -997,7 +997,7 @@ export default function CourtManager({
 
           {/* Teachers Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {teachers.map((teacher) => (
+            {Array.from(new Map(teachers.map((t) => [t.name.trim().toLowerCase(), t])).values()).map((teacher) => (
               <div
                 key={teacher.id}
                 className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition duration-200 flex flex-col justify-between"
@@ -1198,7 +1198,7 @@ export default function CourtManager({
 
           {/* Students Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {students.map((student) => (
+            {Array.from(new Map(students.map((s) => [s.name.trim().toLowerCase(), s])).values()).map((student) => (
               <div
                 key={student.id}
                 className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition duration-200 flex flex-col justify-between"
