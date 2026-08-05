@@ -272,13 +272,15 @@ export default function App() {
   };
 
   const handleDeleteBooking = async (bookingId: string) => {
+    // Optimistically update React state immediately
     setBookings((prev) => prev.filter((b) => b.id !== bookingId));
 
     if (isSupabaseConfigured) {
       try {
         await dbDeleteBooking(bookingId);
         const updated = await dbGetBookings();
-        setBookings(updated);
+        // Ensure deleted booking is filtered out from state
+        setBookings(updated.filter((b) => b.id !== bookingId));
         setDbError(null);
       } catch (err: any) {
         console.error("Erro ao deletar agendamento no Supabase:", err);

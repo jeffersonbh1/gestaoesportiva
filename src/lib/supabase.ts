@@ -456,10 +456,19 @@ export async function dbSaveBooking(booking: Booking): Promise<Booking | null> {
 export async function dbDeleteBooking(bookingId: string): Promise<void> {
   if (!supabase) return;
 
-  const query = supabase.from('agendamentos').delete();
-  const { error } = isValidUuid(bookingId)
-    ? await query.eq('id', bookingId)
-    : await query.eq('nome_cliente', bookingId);
+  try {
+    // Clean up linked rows in child tables first to avoid foreign key constraints
+    await supabase.from('aulas').delete().eq('agendamento_id', bookingId);
+    await supabase.from('jogadores_racha').delete().eq('agendamento_id', bookingId);
+    await supabase.from('avaliacoes_jogadores').delete().eq('agendamento_id', bookingId);
+  } catch (childErr) {
+    console.warn('Aviso ao excluir dependências do agendamento:', childErr);
+  }
+
+  const { error } = await supabase
+    .from('agendamentos')
+    .delete()
+    .eq('id', bookingId);
 
   if (error) {
     console.error('Erro ao deletar agendamento do Supabase:', error);
