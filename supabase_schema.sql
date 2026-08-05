@@ -141,6 +141,7 @@ CREATE TABLE IF NOT EXISTS esportes (
 );
 
 COMMENT ON TABLE esportes IS 'Tabela de cadastro e gestão dos esportes disponíveis na arena.';
+ALTER TABLE esportes ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT TRUE;
 
 -- ====================================================================
 -- 3C. TABELA: tipos_quadra
@@ -155,6 +156,30 @@ CREATE TABLE IF NOT EXISTS tipos_quadra (
 );
 
 COMMENT ON TABLE tipos_quadra IS 'Tabela de cadastro e gestão dos tipos de quadra (ex: Areia, Saibro, Coberta, Poliesportiva).';
+ALTER TABLE tipos_quadra ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT TRUE;
+
+-- ====================================================================
+-- 3E. TABELA: tipos_aluguel
+-- Funcionalidade: Cadastro e Edição de Tipos de Aluguel / Agendamento
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS tipos_aluguel (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nome VARCHAR(100) NOT NULL UNIQUE,
+    descricao TEXT,
+    is_default BOOLEAN DEFAULT FALSE,
+    criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE tipos_aluguel IS 'Tabela de cadastro e gestão dos tipos de aluguel/agendamento (ex: Aluguel, Aulas / Treino, Torneio / Evento).';
+
+-- Tabela alternativa tipos_agendamento para compatibilidade
+CREATE TABLE IF NOT EXISTS tipos_agendamento (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nome VARCHAR(100) NOT NULL UNIQUE,
+    descricao TEXT,
+    is_default BOOLEAN DEFAULT FALSE,
+    criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
 
 -- Desabilitar RLS (Row Level Security) para permitir leitura e gravação com a chave pública/anon
 ALTER TABLE usuarios DISABLE ROW LEVEL SECURITY;
@@ -164,6 +189,8 @@ ALTER TABLE jogadores_racha DISABLE ROW LEVEL SECURITY;
 ALTER TABLE avaliacoes_jogadores DISABLE ROW LEVEL SECURITY;
 ALTER TABLE esportes DISABLE ROW LEVEL SECURITY;
 ALTER TABLE tipos_quadra DISABLE ROW LEVEL SECURITY;
+ALTER TABLE tipos_aluguel DISABLE ROW LEVEL SECURITY;
+ALTER TABLE tipos_agendamento DISABLE ROW LEVEL SECURITY;
 ALTER TABLE professores DISABLE ROW LEVEL SECURITY;
 ALTER TABLE alunos DISABLE ROW LEVEL SECURITY;
 ALTER TABLE aulas DISABLE ROW LEVEL SECURITY;
@@ -282,5 +309,88 @@ VALUES
 ('Saibro', 'Quadra com piso de saibro'),
 ('Coberta', 'Quadra com estrutura e cobertura termoacústica')
 ON CONFLICT (nome) DO NOTHING;
+
+-- ====================================================================
+-- SCRIPT DE TRUNCATE E REPOPULAÇÃO COMPLETA DAS TABELAS DE CADASTRO
+-- Execute este bloco diretamente no SQL Editor do Supabase
+-- ====================================================================
+
+-- 1. LIMPEZA COMPLETA DE TODAS AS TABELAS
+TRUNCATE TABLE 
+    avaliacoes_jogadores,
+    jogadores_racha,
+    aulas,
+    agendamentos,
+    alunos,
+    professores,
+    quadras,
+    tipos_quadra,
+    esportes,
+    tipos_aluguel,
+    tipos_agendamento,
+    usuarios
+RESTART IDENTITY CASCADE;
+
+-- 2. REPOPULAÇÃO DAS TABELAS DE CADASTRO
+
+-- A. Tipos de Quadra
+INSERT INTO tipos_quadra (nome, descricao, ativo) VALUES
+('Areia', 'Quadra de areia fina tratada para futevôlei, beach tennis e vôlei de praia', TRUE),
+('Saibro', 'Quadra de terra e piso saibro para tênis e esportes de quadra aberta', TRUE),
+('Coberta', 'Quadra coberta com estrutura termoacústica e amortecimento', TRUE),
+('Poliesportiva', 'Quadra rápida multiuso para vôlei, basquete e futsal', TRUE),
+('Sintética', 'Quadra com grama sintética de alta densidade', TRUE)
+ON CONFLICT (nome) DO UPDATE SET descricao = EXCLUDED.descricao, ativo = EXCLUDED.ativo;
+
+-- B. Esportes
+INSERT INTO esportes (nome, descricao, ativo) VALUES
+('Vôlei de Areia', 'Modalidade de vôlei de praia disputada na areia', TRUE),
+('Futevôlei', 'Modalidade tradicional de futevôlei', TRUE),
+('Beach Tennis', 'Prática de tênis em quadra de areia', TRUE),
+('Vôlei de Quadra', 'Vôlei tradicional em quadra coberta ou poliesportiva', TRUE)
+ON CONFLICT (nome) DO UPDATE SET descricao = EXCLUDED.descricao, ativo = EXCLUDED.ativo;
+
+-- C. Tipos de Aluguel / Agendamento
+INSERT INTO tipos_aluguel (nome, descricao, is_default) VALUES
+('Aluguel', 'Reserva padrão por hora para jogos avulsos', TRUE),
+('Aulas / Treino', 'Horário reservado para turmas e aulas de professores', FALSE),
+('Torneio / Evento', 'Reserva para campeonatos, clínicas e eventos especiais', FALSE),
+('Mensalista', 'Reserva recorrente contratada mensalmente', FALSE),
+('Racha / Day Use', 'Uso coletivo com divisão de custos entre participantes', FALSE)
+ON CONFLICT (nome) DO UPDATE SET descricao = EXCLUDED.descricao, is_default = EXCLUDED.is_default;
+
+INSERT INTO tipos_agendamento (nome, descricao, is_default) VALUES
+('Aluguel', 'Reserva padrão por hora para jogos avulsos', TRUE),
+('Aulas / Treino', 'Horário reservado para turmas e aulas de professores', FALSE),
+('Torneio / Evento', 'Reserva para campeonatos, clínicas e eventos especiais', FALSE),
+('Mensalista', 'Reserva recorrente contratada mensalmente', FALSE),
+('Racha / Day Use', 'Uso coletivo com divisão de custos entre participantes', FALSE)
+ON CONFLICT (nome) DO UPDATE SET descricao = EXCLUDED.descricao, is_default = EXCLUDED.is_default;
+
+-- D. Quadras
+INSERT INTO quadras (id, nome, tipo, status, preco_por_hora, descricao) VALUES
+('00000000-0000-0000-0000-000000000001', 'Arena Areia 1 - Copacabana', 'Areia', 'Disponível', 90.00, 'Quadra de areia fina premium, ideal para vôlei de praia e futevôlei.'),
+('00000000-0000-0000-0000-000000000002', 'Arena Areia 2 - Ipanema', 'Areia', 'Disponível', 90.00, 'Iluminação de LED de alta performance e sistema de drenagem avançado.'),
+('00000000-0000-0000-0000-000000000003', 'Quadra Central - Coberta', 'Coberta', 'Disponível', 120.00, 'Piso de madeira amortecido e cobertura termoacústica.'),
+('00000000-0000-0000-0000-000000000004', 'Quadra 4 - Poliesportiva', 'Poliesportiva', 'Disponível', 100.00, 'Quadra rápida multiuso perfeita para vôlei de quadra tradicional.')
+ON CONFLICT (id) DO UPDATE SET nome = EXCLUDED.nome, tipo = EXCLUDED.tipo, preco_por_hora = EXCLUDED.preco_por_hora;
+
+-- E. Usuários
+INSERT INTO usuarios (login, senha, nome, perfil, email, telefone) VALUES
+('admin', 'admin123', 'Administrador Fahel', 'Administrador', 'contato@arenafahel.com.br', '(11) 97777-6666')
+ON CONFLICT (login) DO NOTHING;
+
+-- F. Professores
+INSERT INTO professores (id, nome, email, telefone, esporte, valor_hora, disponivel) VALUES
+('f0000000-0000-0000-0000-000000000001', 'Professor Gabriel Costa', 'gabriel.costa@arena.com', '(11) 98888-1111', 'Beach Tennis', 80.00, TRUE),
+('f0000000-0000-0000-0000-000000000002', 'Professora Fernanda Lima', 'fernanda.lima@arena.com', '(11) 98888-2222', 'Futevôlei', 85.00, TRUE)
+ON CONFLICT (id) DO NOTHING;
+
+-- G. Alunos
+INSERT INTO alunos (id, nome, email, telefone, esporte, nivel, professor_id, professor_nome, status) VALUES
+('s0000000-0000-0000-0000-000000000001', 'Lucas Mendes', 'lucas.mendes@email.com', '(11) 97777-3333', 'Beach Tennis', 'Intermediário', 'f0000000-0000-0000-0000-000000000001', 'Professor Gabriel Costa', 'Ativo'),
+('s0000000-0000-0000-0000-000000000002', 'Beatriz Santos', 'beatriz.santos@email.com', '(11) 97777-4444', 'Beach Tennis', 'Iniciante', 'f0000000-0000-0000-0000-000000000001', 'Professor Gabriel Costa', 'Ativo'),
+('s0000000-0000-0000-0000-000000000003', 'Rafael Oliveira', 'rafael.oliveira@email.com', '(11) 97777-5555', 'Futevôlei', 'Avançado', 'f0000000-0000-0000-0000-000000000002', 'Professora Fernanda Lima', 'Ativo')
+ON CONFLICT (id) DO NOTHING;
 
 

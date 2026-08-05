@@ -18,10 +18,15 @@ import {
   dbGetCourtTypes,
   dbSaveCourtType,
   dbDeleteCourtType,
+  dbGetRentalTypes,
+  dbSaveRentalType,
+  dbDeleteRentalType,
   dbGetTeachers,
   dbSaveTeacher,
+  dbDeleteTeacher,
   dbGetStudents,
-  dbSaveStudent
+  dbSaveStudent,
+  dbDeleteStudent
 } from './lib/supabase';
 import Dashboard from './components/Dashboard';
 import CourtGrid from './components/CourtGrid';
@@ -131,7 +136,16 @@ export default function App() {
   };
 
   const [selectedDate, setSelectedDate] = useState(getTodayDate);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(() => {
+    const savedUser = localStorage.getItem('arena_current_user');
+    if (savedUser) {
+      try {
+        const u = JSON.parse(savedUser);
+        if (u && u.role !== 'Administrador') return 'agendamentos';
+      } catch (_) {}
+    }
+    return 'dashboard';
+  });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // 2. Modals state
@@ -150,23 +164,33 @@ export default function App() {
       try {
         setDbLoading(true);
         setDbError(null);
-        const [dbUsers, dbCourts, dbBookings, dbSports, dbCourtTypes, dbTeachers, dbStudents] = await Promise.all([
+        const [dbUsers, dbCourts, dbBookings, dbSports, dbCourtTypes, dbRentalTypes, dbTeachers, dbStudents] = await Promise.all([
           dbGetUsers(),
           dbGetCourts(),
           dbGetBookings(),
           dbGetSports(),
           dbGetCourtTypes(),
+          dbGetRentalTypes(),
           dbGetTeachers(),
           dbGetStudents()
         ]);
         
         if (dbUsers.length > 0) setUsers(dbUsers);
-        if (dbCourts.length > 0) setCourts(dbCourts);
+        
+        // Directly sync state with database tables without length guards
+        setCourts(dbCourts);
         setBookings(dbBookings);
-        if (dbSports.length > 0) setSports(dbSports);
-        if (dbCourtTypes.length > 0) setCourtTypes(dbCourtTypes);
-        if (dbTeachers.length > 0) setTeachers(dbTeachers);
-        if (dbStudents.length > 0) setStudents(dbStudents);
+        setSports(dbSports);
+        setCourtTypes(dbCourtTypes);
+
+        if (dbRentalTypes.length > 0) {
+          setRentalTypes(dbRentalTypes);
+        } else {
+          setRentalTypes(INITIAL_RENTAL_TYPES);
+        }
+
+        setTeachers(dbTeachers);
+        setStudents(dbStudents);
       } catch (err: any) {
         console.error("Erro ao carregar dados do Supabase:", err);
         setDbError(`Erro ao carregar do Supabase: ${err.message || 'Verifique se executou o script SQL'}`);
@@ -185,10 +209,16 @@ export default function App() {
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('arena_current_user', JSON.stringify(currentUser));
+      if (currentUser.role !== 'Administrador') {
+        const adminOnlyTabs = ['dashboard', 'configuracoes', 'financeiro', 'usuarios'];
+        if (adminOnlyTabs.includes(activeTab)) {
+          setActiveTab('agendamentos');
+        }
+      }
     } else {
       localStorage.removeItem('arena_current_user');
     }
-  }, [currentUser]);
+  }, [currentUser, activeTab]);
 
   useEffect(() => {
     localStorage.setItem('arena_courts', JSON.stringify(courts));
@@ -365,12 +395,28 @@ export default function App() {
     }
   };
 
-  const handleAddRentalType = (item: RentalType) => {
+  const handleAddRentalType = async (item: RentalType) => {
     setRentalTypes((prev) => [...prev, item]);
+    if (isSupabaseConfigured) {
+      try {
+        await dbSaveRentalType(item);
+        const updated = await dbGetRentalTypes();
+        if (updated.length > 0) setRentalTypes(updated);
+      } catch (err) {
+        console.error("Erro ao salvar tipo de aluguel:", err);
+      }
+    }
   };
 
-  const handleDeleteRentalType = (id: string) => {
+  const handleDeleteRentalType = async (id: string, name?: string) => {
     setRentalTypes((prev) => prev.filter((r) => r.id !== id));
+    if (isSupabaseConfigured) {
+      try {
+        await dbDeleteRentalType(id, name);
+      } catch (err) {
+        console.error("Erro ao deletar tipo de aluguel:", err);
+      }
+    }
   };
 
   const handleAddTeacher = async (teacher: Teacher) => {
@@ -393,8 +439,15 @@ export default function App() {
     }
   };
 
-  const handleDeleteTeacher = (id: string) => {
+  const handleDeleteTeacher = async (id: string) => {
     setTeachers((prev) => prev.filter((t) => t.id !== id));
+    if (isSupabaseConfigured) {
+      try {
+        await dbDeleteTeacher(id);
+      } catch (err) {
+        console.error("Erro ao deletar professor:", err);
+      }
+    }
   };
 
   const handleAddStudent = async (student: Student) => {
@@ -417,8 +470,15 @@ export default function App() {
     }
   };
 
-  const handleDeleteStudent = (id: string) => {
+  const handleDeleteStudent = async (id: string) => {
     setStudents((prev) => prev.filter((s) => s.id !== id));
+    if (isSupabaseConfigured) {
+      try {
+        await dbDeleteStudent(id);
+      } catch (err) {
+        console.error("Erro ao deletar aluno:", err);
+      }
+    }
   };
 
   const handleSaveSport = async (sport: Sport) => {
@@ -545,21 +605,6 @@ export default function App() {
             </button>
           </div>
 
-          {/* Database connection status */}
-          <div className={`px-6 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between md:flex ${mobileMenuOpen ? 'flex' : 'hidden md:flex'}`}>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status Banco</span>
-            {isSupabaseConfigured ? (
-              <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-[9px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-100 animate-pulse">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                Supabase
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 text-[9px] font-extrabold px-2 py-0.5 rounded-full border border-amber-100">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
-                Local (Offline)
-              </span>
-            )}
-          </div>
 
           {/* Date Selector sidebar controller */}
           <div className={`p-5 border-b border-slate-100 space-y-2 md:block ${mobileMenuOpen ? 'block' : 'hidden md:block'}`}>
@@ -577,18 +622,20 @@ export default function App() {
 
           {/* Navigation Links */}
           <nav className={`p-4 space-y-1 md:block ${mobileMenuOpen ? 'block' : 'hidden md:block'}`}>
-            <button
-              id="nav-dashboard"
-              onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                activeTab === 'dashboard' 
-                  ? 'bg-blue-50 text-blue-600 font-bold' 
-                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
-              }`}
-            >
-              <LayoutDashboard className="h-4.5 w-4.5" />
-              Painel Geral
-            </button>
+            {currentUser.role === 'Administrador' && (
+              <button
+                id="nav-dashboard"
+                onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                  activeTab === 'dashboard' 
+                    ? 'bg-blue-50 text-blue-600 font-bold' 
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+                }`}
+              >
+                <LayoutDashboard className="h-4.5 w-4.5" />
+                Painel Geral
+              </button>
+            )}
 
             <button
               id="nav-scheduler"
@@ -603,18 +650,20 @@ export default function App() {
               Quadras & Horários
             </button>
 
-            <button
-              id="nav-financeiro"
-              onClick={() => { setActiveTab('financeiro'); setMobileMenuOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                activeTab === 'financeiro' 
-                  ? 'bg-blue-50 text-blue-600 font-bold' 
-                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
-              }`}
-            >
-              <TrendingUp className="h-4.5 w-4.5" />
-              Histórico Financeiro
-            </button>
+            {currentUser.role === 'Administrador' && (
+              <button
+                id="nav-financeiro"
+                onClick={() => { setActiveTab('financeiro'); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                  activeTab === 'financeiro' 
+                    ? 'bg-blue-50 text-blue-600 font-bold' 
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+                }`}
+              >
+                <TrendingUp className="h-4.5 w-4.5" />
+                Histórico Financeiro
+              </button>
+            )}
 
             <button
               id="nav-racha"
@@ -642,18 +691,20 @@ export default function App() {
               Melhores do Jogo
             </button>
 
-            <button
-              id="nav-configuracoes"
-              onClick={() => { setActiveTab('configuracoes'); setMobileMenuOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                activeTab === 'configuracoes' 
-                  ? 'bg-blue-50 text-blue-600 font-bold' 
-                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
-              }`}
-            >
-              <Settings className="h-4.5 w-4.5" />
-              Gerenciar Quadras
-            </button>
+            {currentUser.role === 'Administrador' && (
+              <button
+                id="nav-configuracoes"
+                onClick={() => { setActiveTab('configuracoes'); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                  activeTab === 'configuracoes' 
+                    ? 'bg-blue-50 text-blue-600 font-bold' 
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+                }`}
+              >
+                <Settings className="h-4.5 w-4.5" />
+                Gerenciar Quadras
+              </button>
+            )}
 
             {currentUser.role === 'Administrador' && (
               <button
@@ -732,7 +783,7 @@ export default function App() {
         )}
 
         <AnimatePresence mode="wait">
-          {activeTab === 'dashboard' && (
+          {activeTab === 'dashboard' && currentUser.role === 'Administrador' && (
             <motion.div
               key="dashboard"
               initial={{ opacity: 0, y: 15 }}
@@ -790,7 +841,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {activeTab === 'financeiro' && (
+          {activeTab === 'financeiro' && currentUser.role === 'Administrador' && (
             <motion.div
               key="financeiro"
               initial={{ opacity: 0, y: 15 }}
@@ -836,7 +887,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {activeTab === 'configuracoes' && (
+          {activeTab === 'configuracoes' && currentUser.role === 'Administrador' && (
             <motion.div
               key="configuracoes"
               initial={{ opacity: 0, y: 15 }}

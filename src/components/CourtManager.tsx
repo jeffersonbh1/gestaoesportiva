@@ -118,7 +118,7 @@ export default function CourtManager({
   };
 
   // Submenu Navigation State
-  const [activeSubTab, setActiveSubTab] = useState<'quadras' | 'esportes' | 'tipos_aluguel' | 'professores' | 'alunos'>('quadras');
+  const [activeSubTab, setActiveSubTab] = useState<'quadras' | 'tipos_quadra' | 'esportes' | 'tipos_aluguel' | 'professores' | 'alunos'>('quadras');
 
   // Sport form state (Create/Edit)
   const [showAddSportForm, setShowAddSportForm] = useState(false);
@@ -295,6 +295,20 @@ export default function CourtManager({
         >
           <Settings className="h-4 w-4" />
           Quadras Esportivas
+        </button>
+        <button
+          onClick={() => setActiveSubTab('tipos_quadra')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+            activeSubTab === 'tipos_quadra'
+              ? 'bg-slate-900 text-white shadow-sm'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Layers className="h-4 w-4 text-indigo-500" />
+          Tipos de Quadra
+          <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-200/50 font-mono">
+            {courtTypes.length}
+          </span>
         </button>
         <button
           onClick={() => setActiveSubTab('esportes')}
@@ -570,7 +584,170 @@ export default function CourtManager({
         </div>
       )}
 
-      {/* 2. ESPORTES SUBTAB */}
+      {/* 2. TIPOS DE QUADRA SUBTAB */}
+      {activeSubTab === 'tipos_quadra' && (
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <div>
+              <h3 className="font-bold text-slate-900 flex items-center gap-1.5 tracking-tight">
+                <Layers className="h-5 w-5 text-indigo-500" />
+                Cadastro & Edição de Tipos de Quadra
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                Gerencie as superfícies e tipos de quadra disponíveis na arena (ex: Areia, Saibro, Coberta, Poliesportiva, Sintética).
+              </p>
+            </div>
+            {isAdmin ? (
+              <button
+                onClick={() => {
+                  if (showAddCourtTypeForm && editingCourtType) {
+                    setEditingCourtType(null);
+                    setCourtTypeName('');
+                    setCourtTypeDescription('');
+                  } else {
+                    setShowAddCourtTypeForm(!showAddCourtTypeForm);
+                  }
+                }}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition flex items-center gap-2 cursor-pointer shadow-sm"
+              >
+                <Plus className="h-4 w-4" />
+                {showAddCourtTypeForm ? 'Fechar Form' : 'Novo Tipo de Quadra'}
+              </button>
+            ) : (
+              <div className="bg-slate-50 border border-slate-200 text-slate-500 px-3.5 py-1.5 rounded-xl text-[10px] font-bold">
+                Visualização de Leitura
+              </div>
+            )}
+          </div>
+
+          {/* Form Create/Edit */}
+          {showAddCourtTypeForm && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm max-w-2xl"
+            >
+              <h4 className="font-bold text-slate-950 mb-4 text-xs uppercase tracking-wider">
+                {editingCourtType ? 'Editar Tipo de Quadra' : 'Cadastrar Novo Tipo de Quadra'}
+              </h4>
+              <form onSubmit={handleSaveCourtTypeSubmit} className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 block mb-1">Nome do Tipo *</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Areia, Saibro, Coberta, Sintética"
+                    value={courtTypeName}
+                    onChange={(e) => setCourtTypeName(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-semibold text-slate-800"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 block mb-1">Descrição / Observações (Opcional)</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Areia fina tratada, piso saibro oficial..."
+                    value={courtTypeDescription}
+                    onChange={(e) => setCourtTypeDescription(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium text-slate-700"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddCourtTypeForm(false);
+                      setEditingCourtType(null);
+                      setCourtTypeName('');
+                      setCourtTypeDescription('');
+                    }}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+                  >
+                    {editingCourtType ? 'Salvar Alterações' : 'Cadastrar Tipo'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          )}
+
+          {/* List of Court Types */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {courtTypes.map((item) => (
+              <div
+                key={item.id}
+                className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between hover:border-slate-300 transition"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                      <Layers className="h-4 w-4 text-indigo-500 shrink-0" />
+                      {item.name}
+                    </span>
+                    <span className="text-[9px] px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-100">
+                      Ativo
+                    </span>
+                  </div>
+                  {item.description ? (
+                    <p className="text-xs text-slate-500 font-medium mt-1">{item.description}</p>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic mt-1">Sem descrição cadastrada</p>
+                  )}
+                </div>
+
+                {isAdmin && (
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                    <button
+                      onClick={() => {
+                        setEditingCourtType(item);
+                        setCourtTypeName(item.name);
+                        setCourtTypeDescription(item.description || '');
+                        setShowAddCourtTypeForm(true);
+                      }}
+                      className="px-2.5 py-1.5 bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                      title="Editar tipo de quadra"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      Editar
+                    </button>
+
+                    {confirmDelCourtTypeId === item.id ? (
+                      <button
+                        onClick={() => {
+                          onDeleteCourtType?.(item.id, item.name);
+                          setConfirmDelCourtTypeId(null);
+                        }}
+                        className="px-2.5 py-1.5 bg-rose-600 text-white hover:bg-rose-700 rounded-lg text-xs font-bold transition cursor-pointer"
+                      >
+                        Confirmar
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setConfirmDelCourtTypeId(item.id);
+                          setTimeout(() => setConfirmDelCourtTypeId(null), 4000);
+                        }}
+                        className="p-1.5 bg-slate-50 hover:bg-rose-50 hover:text-rose-600 rounded-lg text-slate-400 transition cursor-pointer"
+                        title="Excluir tipo de quadra"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 3. ESPORTES SUBTAB */}
       {activeSubTab === 'esportes' && (
         <div className="space-y-6">
           {/* Header */}

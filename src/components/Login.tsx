@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User } from '../types';
-import { Volleyball, Lock, User as UserIcon, Sparkles, AlertCircle } from 'lucide-react';
+import { Volleyball, Lock, User as UserIcon, AlertCircle } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface LoginProps {
@@ -32,17 +32,6 @@ export default function Login({ onLogin, users }: LoginProps) {
         setError('Usuário ou senha incorretos. Tente novamente.');
       }
     }, 600);
-  };
-
-  const handleQuickLogin = (role: 'admin' | 'user') => {
-    setError(null);
-    if (role === 'admin') {
-      setUsername('admin');
-      setPassword('admin123');
-    } else {
-      setUsername('usuario');
-      setPassword('user123');
-    }
   };
 
   return (
@@ -98,7 +87,7 @@ export default function Login({ onLogin, users }: LoginProps) {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                  placeholder="Ex: admin, joao"
+                  placeholder="Seu usuário"
                 />
               </div>
             </div>
@@ -134,32 +123,6 @@ export default function Login({ onLogin, users }: LoginProps) {
               </button>
             </div>
           </form>
-
-          {/* Quick Setup for Reviewers */}
-          <div className="pt-4 border-t border-slate-100 text-center">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2.5">
-              Acesso Rápido para Testes
-            </span>
-            <div className="grid grid-cols-2 gap-2.5">
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('admin')}
-                className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition cursor-pointer flex flex-col items-center justify-center gap-0.5"
-              >
-                <span className="text-blue-600">Administrador</span>
-                <span className="text-[8px] text-slate-400 font-mono">admin / admin123</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('user')}
-                className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition cursor-pointer flex flex-col items-center justify-center gap-0.5"
-              >
-                <span className="text-slate-600">Usuário Padrão</span>
-                <span className="text-[8px] text-slate-400 font-mono">usuario / user123</span>
-              </button>
-            </div>
-          </div>
         </motion.div>
 
         <p className="mt-6 text-center text-[11px] text-slate-400 font-semibold">

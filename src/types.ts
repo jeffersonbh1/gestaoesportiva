@@ -46,6 +46,8 @@ export interface Player {
   phone?: string;
   hasPaid: boolean;
   amount: number;
+  isContractor?: boolean;
+  isCustom?: boolean;
 }
 
 export interface BookingStudent {

@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-import { Court, Booking, BookingStudent, User, Player, PlayerRating, Sport, CourtTypeItem, Teacher, Student } from '../types';
-import { INITIAL_TEACHERS, INITIAL_STUDENTS } from '../data/mockData';
+import { Court, Booking, BookingStudent, User, Player, PlayerRating, Sport, CourtTypeItem, RentalType, Teacher, Student } from '../types';
+import { INITIAL_TEACHERS, INITIAL_STUDENTS, INITIAL_COURT_TYPES, INITIAL_RENTAL_TYPES } from '../data/mockData';
 
 const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
 const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
@@ -117,41 +117,85 @@ export async function dbDeleteUser(userId: string): Promise<void> {
 // Helper para garantir UUID de professor no Supabase
 async function ensureTeacherUuid(teacherId?: string, teacherName?: string, sport?: string): Promise<string | null> {
   if (!supabase) return null;
-  if (teacherId && isValidUuid(teacherId)) return teacherId;
-  if (!teacherName || !teacherName.trim()) return null;
 
-  const cleanName = teacherName.trim();
+  // 1. Se teacherId for um UUID válido, verifica se realmente existe na tabela 'professores'
+  if (teacherId && isValidUuid(teacherId)) {
+    try {
+      const { data: pCheck } = await supabase
+        .from('professores')
+        .select('id')
+        .eq('id', teacherId)
+        .limit(1);
+      if (pCheck && pCheck.length > 0) {
+        return pCheck[0].id;
+      }
+    } catch (err) {
+      console.warn('Erro ao verificar UUID de professor:', err);
+    }
+  }
+
+  // 2. Tenta determinar o nome do professor
+  let nameToSearch = teacherName?.trim();
+  if (!nameToSearch && teacherId) {
+    const foundInMock = INITIAL_TEACHERS.find((t) => t.id === teacherId);
+    if (foundInMock) {
+      nameToSearch = foundInMock.name;
+    }
+  }
+
+  // Se não temos um nome, busca qualquer professor na tabela como fallback
+  if (!nameToSearch) {
+    try {
+      const { data: anyProf } = await supabase
+        .from('professores')
+        .select('id')
+        .limit(1);
+      if (anyProf && anyProf.length > 0) {
+        return anyProf[0].id;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  const cleanName = nameToSearch.trim();
   const simpleName = cleanName.replace(/^(prof\.|profa\.|professor|professora)\s+/i, '').trim();
 
   try {
-    // 1. Tenta buscar pelo nome simples ou limpo na tabela professores usando ilike
-    const { data } = await supabase
-      .from('professores')
-      .select('id, nome')
-      .ilike('nome', `%${simpleName}%`)
-      .limit(1);
-
-    if (data && data.length > 0) {
-      return data[0].id;
-    }
-
-    if (simpleName !== cleanName) {
-      const { data: dataClean } = await supabase
+    // 3. Busca por nome simples (sem o prefixo Prof.) usando ilike direto
+    if (simpleName) {
+      const { data: dataSimple } = await supabase
         .from('professores')
         .select('id, nome')
-        .ilike('nome', `%${cleanName}%`)
+        .ilike('nome', `%${simpleName}%`)
         .limit(1);
 
-      if (dataClean && dataClean.length > 0) {
-        return dataClean[0].id;
+      if (dataSimple && dataSimple.length > 0) {
+        return dataSimple[0].id;
       }
     }
 
-    // 2. Se não encontrou, insere novo professor na tabela professores para obter UUID
+    // 4. Busca por nome completo limpo se for diferente do nome simples
+    if (cleanName && cleanName !== simpleName) {
+      const sanitizedClean = cleanName.replace(/[^a-zA-Z0-9 áàâãéèêíïóôõöúçñÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ]/g, '').trim();
+      if (sanitizedClean) {
+        const { data: dataClean } = await supabase
+          .from('professores')
+          .select('id, nome')
+          .ilike('nome', `%${sanitizedClean}%`)
+          .limit(1);
+
+        if (dataClean && dataClean.length > 0) {
+          return dataClean[0].id;
+        }
+      }
+    }
+
+    // 5. Se não encontrou, insere novo professor na tabela professores para obter UUID real
+    const displayName = cleanName.startsWith('Prof') ? cleanName : `Prof. ${cleanName}`;
     const { data: inserted, error } = await supabase
       .from('professores')
       .insert({
-        nome: cleanName,
+        nome: displayName,
         esporte: sport || 'Futevôlei',
         status: 'Ativo'
       })
@@ -163,6 +207,15 @@ async function ensureTeacherUuid(teacherId?: string, teacherName?: string, sport
     if (inserted && inserted.length > 0) {
       return inserted[0].id;
     }
+
+    // 6. Fallback se insert não retornou por restrição de unicidade
+    const { data: fallbackProf } = await supabase
+      .from('professores')
+      .select('id')
+      .limit(1);
+    if (fallbackProf && fallbackProf.length > 0) {
+      return fallbackProf[0].id;
+    }
   } catch (err) {
     console.warn('Erro em ensureTeacherUuid:', err);
   }
@@ -171,29 +224,61 @@ async function ensureTeacherUuid(teacherId?: string, teacherName?: string, sport
 }
 
 // Helper para garantir UUID de aluno no Supabase
-async function ensureStudentUuid(studentId?: string, studentName?: string, sport?: string, teacherIdUuid?: string | null): Promise<string | null> {
+async function ensureStudentUuid(
+  studentId?: string,
+  studentName?: string,
+  sport?: string,
+  teacherIdUuid?: string | null
+): Promise<string | null> {
   if (!supabase) return null;
-  if (studentId && isValidUuid(studentId)) return studentId;
-  if (!studentName || !studentName.trim()) return null;
 
-  const cleanName = studentName.trim();
+  // 1. Se studentId for um UUID válido, verifica se realmente existe na tabela 'alunos'
+  if (studentId && isValidUuid(studentId)) {
+    try {
+      const { data: sCheck } = await supabase
+        .from('alunos')
+        .select('id')
+        .eq('id', studentId)
+        .limit(1);
+      if (sCheck && sCheck.length > 0) {
+        return sCheck[0].id;
+      }
+    } catch (err) {
+      console.warn('Erro ao verificar UUID de aluno:', err);
+    }
+  }
+
+  // 2. Tenta determinar o nome do aluno
+  let nameToSearch = studentName?.trim();
+  if (!nameToSearch && studentId) {
+    const foundInMock = INITIAL_STUDENTS.find((s) => s.id === studentId);
+    if (foundInMock) {
+      nameToSearch = foundInMock.name;
+    }
+  }
+
+  if (!nameToSearch) return null;
+
+  const cleanName = nameToSearch.trim();
+  const sanitizedClean = cleanName.replace(/[^a-zA-Z0-9 áàâãéèêíïóôõöúçñÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ]/g, '').trim();
 
   try {
-    // 1. Tenta buscar pelo nome na tabela alunos
+    // 3. Tenta buscar pelo nome na tabela alunos
     const { data } = await supabase
       .from('alunos')
       .select('id, nome')
-      .ilike('nome', `%${cleanName}%`)
+      .ilike('nome', `%${sanitizedClean || cleanName}%`)
       .limit(1);
 
     if (data && data.length > 0) {
       return data[0].id;
     }
 
-    // 2. Se não encontrou, insere novo aluno na tabela alunos para obter UUID
+    // 4. Se não encontrou, insere novo aluno na tabela alunos para obter UUID real
     const studentPayload: any = {
       nome: cleanName,
       esporte: sport || 'Futevôlei',
+      nivel: 'Iniciante',
       status: 'Ativo'
     };
     if (teacherIdUuid && isValidUuid(teacherIdUuid)) {
@@ -210,6 +295,15 @@ async function ensureStudentUuid(studentId?: string, studentName?: string, sport
     }
     if (inserted && inserted.length > 0) {
       return inserted[0].id;
+    }
+
+    // Fallback se erro de inserção
+    const { data: fallbackStudent } = await supabase
+      .from('alunos')
+      .select('id')
+      .limit(1);
+    if (fallbackStudent && fallbackStudent.length > 0) {
+      return fallbackStudent[0].id;
     }
   } catch (err) {
     console.warn('Erro em ensureStudentUuid:', err);
@@ -336,6 +430,19 @@ export async function dbSaveTeacher(teacher: Teacher): Promise<Teacher | null> {
   return null;
 }
 
+export async function dbDeleteTeacher(teacherId: string): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    if (isValidUuid(teacherId)) {
+      await supabase.from('professores').delete().eq('id', teacherId);
+    }
+    return true;
+  } catch (err) {
+    console.error('Erro ao excluir professor no Supabase:', err);
+    return false;
+  }
+}
+
 export async function dbGetStudents(): Promise<Student[]> {
   if (!supabase) return [];
   try {
@@ -448,6 +555,19 @@ export async function dbSaveStudent(student: Student): Promise<Student | null> {
   }
 
   return null;
+}
+
+export async function dbDeleteStudent(studentId: string): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    if (isValidUuid(studentId)) {
+      await supabase.from('alunos').delete().eq('id', studentId);
+    }
+    return true;
+  } catch (err) {
+    console.error('Erro ao excluir aluno no Supabase:', err);
+    return false;
+  }
 }
 
 export async function dbGetCourts(): Promise<Court[]> {
@@ -592,6 +712,11 @@ export async function dbGetBookings(): Promise<Booking[]> {
             teacherName: a.professores?.nome || undefined,
             students: []
           };
+        } else {
+          if (!aulasMap[bId].teacherId && a.professor_id) {
+            aulasMap[bId].teacherId = a.professor_id;
+            aulasMap[bId].teacherName = a.professores?.nome || undefined;
+          }
         }
         if (a.aluno_id || a.alunos?.nome) {
           aulasMap[bId].students.push({
@@ -738,49 +863,67 @@ export async function dbSaveBooking(booking: Booking): Promise<Booking | null> {
             aluno_id: studentUuid,
           });
         }
-        await supabase.from('aulas').insert(aulaRows);
+        const { error: insError } = await supabase.from('aulas').insert(aulaRows);
+        if (insError) {
+          console.error('Erro ao inserir registros na tabela aulas:', insError);
+        }
       } else if (teacherUuid) {
-        await supabase.from('aulas').insert([{
+        // Tenta inserir apenas com professor (aluno_id = null)
+        const { error: insError } = await supabase.from('aulas').insert([{
           agendamento_id: bookingId,
           professor_id: teacherUuid,
           aluno_id: null
         }]);
+        if (insError) {
+          console.warn('Erro ao inserir aula sem aluno (pode haver restrição NOT NULL em aluno_id). Tentando vincular aluno padrão:', insError);
+          // Fallback: se aluno_id for NOT NULL na tabela 'aulas', busca/cria aluno genérico de apoio
+          const fallbackStudentUuid = await ensureStudentUuid(undefined, 'Aluno de Aula', booking.sport, teacherUuid);
+          if (fallbackStudentUuid) {
+            await supabase.from('aulas').insert([{
+              agendamento_id: bookingId,
+              professor_id: teacherUuid,
+              aluno_id: fallbackStudentUuid
+            }]);
+          }
+        }
       }
     } catch (aulasErr) {
       console.warn('Erro ao sincronizar tabela aulas no Supabase:', aulasErr);
     }
   }
 
-  // 5. Sincroniza os jogadores de racha (jogadores_racha)
-  if (booking.players && booking.players.length > 0) {
-    // Remove jogadores antigos do agendamento
-    await supabase
-      .from('jogadores_racha')
-      .delete()
-      .eq('agendamento_id', bookingId);
+  // 5. Sincroniza os jogadores de racha (jogadores_racha) apenas se a propriedade players for fornecida (Array)
+  if (Array.isArray(booking.players)) {
+    try {
+      // Remove jogadores antigos do agendamento
+      await supabase
+        .from('jogadores_racha')
+        .delete()
+        .eq('agendamento_id', bookingId);
 
-    // Insere os novos jogadores
-    const dbPlayers = booking.players.map((p) => {
-      const item: any = {
-        agendamento_id: bookingId,
-        nome: p.name,
-        email: p.email || null,
-        telefone: p.phone || null,
-        pago: p.hasPaid,
-        valor: Number(p.amount) || 0,
-      };
-      if (isValidUuid(p.id)) {
-        item.id = p.id;
+      if (booking.players.length > 0) {
+        // Insere os novos jogadores (sem passar id fixo para evitar erros de PK no Supabase)
+        const dbPlayers = booking.players.map((p) => ({
+          agendamento_id: bookingId,
+          nome: p.name,
+          email: p.email || null,
+          telefone: p.phone || null,
+          pago: Boolean(p.hasPaid),
+          valor: Number(p.amount) || 0,
+        }));
+
+        const { error: insError } = await supabase
+          .from('jogadores_racha')
+          .insert(dbPlayers);
+
+        if (insError) {
+          console.error('Erro ao salvar jogadores de racha no Supabase:', insError);
+          throw insError;
+        }
       }
-      return item;
-    });
-
-    const { error: insError } = await supabase
-      .from('jogadores_racha')
-      .insert(dbPlayers);
-
-    if (insError) {
-      console.error('Erro ao salvar jogadores de racha no Supabase:', insError);
+    } catch (rachaErr) {
+      console.error('Erro ao sincronizar jogadores de racha no Supabase:', rachaErr);
+      throw rachaErr;
     }
   }
 
@@ -910,9 +1053,18 @@ export async function dbSaveSport(sport: Sport): Promise<Sport | null> {
   }
 
   const query = supabase.from('esportes');
-  const { data, error } = isUuid
+  let { data, error } = isUuid
     ? await query.upsert(dbSport).select().single()
     : await query.upsert(dbSport, { onConflict: 'nome' }).select().single();
+
+  if (error && (error.message?.includes('ativo') || error.message?.includes('schema cache') || error.details?.includes('ativo'))) {
+    delete dbSport.ativo;
+    const retry = isUuid
+      ? await query.upsert(dbSport).select().single()
+      : await query.upsert(dbSport, { onConflict: 'nome' }).select().single();
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) {
     console.error('Erro ao salvar esporte no Supabase:', error);
@@ -922,8 +1074,8 @@ export async function dbSaveSport(sport: Sport): Promise<Sport | null> {
   if (data) {
     return {
       id: data.id,
-      name: data.nome,
-      description: data.descricao || undefined,
+      name: data.nome || data.name,
+      description: data.descricao || data.description || undefined,
       active: data.ativo ?? true,
     };
   }
@@ -950,23 +1102,65 @@ export async function dbDeleteSport(sportId: string, sportName?: string): Promis
 // ====================================================================
 
 export async function dbGetCourtTypes(): Promise<CourtTypeItem[]> {
-  if (!supabase) return [];
-  const { data, error } = await supabase
-    .from('tipos_quadra')
-    .select('*')
-    .order('nome', { ascending: true });
+  if (!supabase) return INITIAL_COURT_TYPES;
 
-  if (error) {
-    console.error('Erro ao buscar tipos de quadra do Supabase:', error);
-    return [];
+  let loadedTypes: CourtTypeItem[] = [];
+
+  // 1. Tenta buscar em tabelas de tipo de quadra no Supabase
+  const possibleTables = ['tipos_quadra', 'tipo_quadra', 'tipos_quadras'];
+  for (const tableName of possibleTables) {
+    try {
+      const { data, error } = await supabase
+        .from(tableName)
+        .select('*')
+        .order('nome', { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        loadedTypes = data.map((t) => ({
+          id: t.id,
+          name: t.nome || t.name || t.tipo,
+          description: t.descricao || t.description || undefined,
+          active: t.ativo ?? t.active ?? true,
+        }));
+        break;
+      }
+    } catch (_) {}
   }
 
-  return (data || []).map((t) => ({
-    id: t.id,
-    name: t.nome,
-    description: t.descricao || undefined,
-    active: t.ativo ?? true,
-  }));
+  // 2. Extrai tipos de quadra já cadastrados na tabela 'quadras' para garantir total cobertura
+  try {
+    const { data: quadrasData } = await supabase.from('quadras').select('tipo');
+    if (quadrasData && quadrasData.length > 0) {
+      const existingNames = new Set(loadedTypes.map((t) => t.name.trim().toLowerCase()));
+      for (const q of quadrasData) {
+        if (q.tipo && q.tipo.trim() && !existingNames.has(q.tipo.trim().toLowerCase())) {
+          existingNames.add(q.tipo.trim().toLowerCase());
+          loadedTypes.push({
+            id: `type-${q.tipo.trim().toLowerCase().replace(/\s+/g, '-')}`,
+            name: q.tipo.trim(),
+            description: 'Tipo cadastrado nas quadras da arena',
+            active: true,
+          });
+        }
+      }
+    }
+  } catch (_) {}
+
+  // 3. Se nenhuma quadra/tipo for encontrado no banco, utiliza os dados padrões
+  if (loadedTypes.length === 0) {
+    return INITIAL_COURT_TYPES;
+  }
+
+  // Deduplica por nome
+  const uniqueMap = new Map<string, CourtTypeItem>();
+  for (const item of loadedTypes) {
+    const key = item.name.trim().toLowerCase();
+    if (!uniqueMap.has(key)) {
+      uniqueMap.set(key, item);
+    }
+  }
+
+  return Array.from(uniqueMap.values());
 }
 
 export async function dbSaveCourtType(courtType: CourtTypeItem): Promise<CourtTypeItem | null> {
@@ -983,23 +1177,50 @@ export async function dbSaveCourtType(courtType: CourtTypeItem): Promise<CourtTy
     dbType.id = courtType.id;
   }
 
-  const query = supabase.from('tipos_quadra');
-  const { data, error } = isUuid
-    ? await query.upsert(dbType).select().single()
-    : await query.upsert(dbType, { onConflict: 'nome' }).select().single();
+  const possibleTables = ['tipos_quadra', 'tipo_quadra', 'tipos_quadras'];
+  let savedData: any = null;
+  let lastError: any = null;
 
-  if (error) {
-    console.error('Erro ao salvar tipo de quadra no Supabase:', error);
-    throw error;
+  for (const tableName of possibleTables) {
+    try {
+      const query = supabase.from(tableName);
+      let { data, error } = isUuid
+        ? await query.upsert(dbType).select().single()
+        : await query.upsert(dbType, { onConflict: 'nome' }).select().single();
+
+      if (error && (error.message?.includes('ativo') || error.message?.includes('schema cache') || error.details?.includes('ativo'))) {
+        const fallbackType = { ...dbType };
+        delete fallbackType.ativo;
+        const retry = isUuid
+          ? await query.upsert(fallbackType).select().single()
+          : await query.upsert(fallbackType, { onConflict: 'nome' }).select().single();
+        data = retry.data;
+        error = retry.error;
+      }
+
+      if (!error && data) {
+        savedData = data;
+        break;
+      } else {
+        lastError = error;
+      }
+    } catch (e) {
+      lastError = e;
+    }
   }
 
-  if (data) {
+  if (savedData) {
     return {
-      id: data.id,
-      name: data.nome,
-      description: data.descricao || undefined,
-      active: data.ativo ?? true,
+      id: savedData.id,
+      name: savedData.nome || savedData.name,
+      description: savedData.descricao || savedData.description || undefined,
+      active: savedData.ativo ?? true,
     };
+  }
+
+  if (lastError) {
+    console.error('Erro ao salvar tipo de quadra no Supabase:', lastError);
+    throw lastError;
   }
 
   return null;
@@ -1008,13 +1229,112 @@ export async function dbSaveCourtType(courtType: CourtTypeItem): Promise<CourtTy
 export async function dbDeleteCourtType(courtTypeId: string, courtTypeName?: string): Promise<void> {
   if (!supabase) return;
 
-  const query = supabase.from('tipos_quadra').delete();
-  const { error } = isValidUuid(courtTypeId)
-    ? await query.eq('id', courtTypeId)
-    : await query.eq('nome', courtTypeName || courtTypeId);
-
-  if (error) {
-    console.error('Erro ao deletar tipo de quadra do Supabase:', error);
-    throw error;
+  const possibleTables = ['tipos_quadra', 'tipo_quadra', 'tipos_quadras'];
+  for (const tableName of possibleTables) {
+    try {
+      const query = supabase.from(tableName).delete();
+      if (isValidUuid(courtTypeId)) {
+        await query.eq('id', courtTypeId);
+      } else {
+        await query.eq('nome', courtTypeName || courtTypeId);
+      }
+    } catch (_) {}
   }
 }
+
+// ====================================================================
+// TIPOS DE ALUGUEL / AGENDAMENTO (tabela: tipos_aluguel)
+// ====================================================================
+
+export async function dbGetRentalTypes(): Promise<RentalType[]> {
+  if (!supabase) return INITIAL_RENTAL_TYPES;
+  try {
+    const { data, error } = await supabase
+      .from('tipos_aluguel')
+      .select('*')
+      .order('nome', { ascending: true });
+
+    if (!error && data && data.length > 0) {
+      return data.map((t) => ({
+        id: t.id,
+        name: t.nome,
+        description: t.descricao || undefined,
+        isDefault: t.is_default ?? false,
+      }));
+    }
+  } catch (_) {}
+
+  try {
+    const { data, error } = await supabase
+      .from('tipos_agendamento')
+      .select('*')
+      .order('nome', { ascending: true });
+
+    if (!error && data && data.length > 0) {
+      return data.map((t) => ({
+        id: t.id,
+        name: t.nome,
+        description: t.descricao || undefined,
+        isDefault: t.is_default ?? false,
+      }));
+    }
+  } catch (_) {}
+
+  return INITIAL_RENTAL_TYPES;
+}
+
+export async function dbSaveRentalType(rentalType: RentalType): Promise<RentalType | null> {
+  if (!supabase) return null;
+
+  const dbItem: any = {
+    nome: rentalType.name,
+    descricao: rentalType.description || null,
+    is_default: rentalType.isDefault ?? false,
+  };
+
+  if (isValidUuid(rentalType.id)) {
+    dbItem.id = rentalType.id;
+  }
+
+  let { data, error } = await supabase
+    .from('tipos_aluguel')
+    .upsert(dbItem, { onConflict: 'nome' })
+    .select()
+    .single();
+
+  if (error) {
+    const res = await supabase
+      .from('tipos_agendamento')
+      .upsert(dbItem, { onConflict: 'nome' })
+      .select()
+      .single();
+    data = res.data;
+  }
+
+  if (data) {
+    return {
+      id: data.id,
+      name: data.nome,
+      description: data.descricao || undefined,
+      isDefault: data.is_default ?? false,
+    };
+  }
+
+  return null;
+}
+
+export async function dbDeleteRentalType(id: string, name?: string): Promise<void> {
+  if (!supabase) return;
+  try {
+    const q1 = supabase.from('tipos_aluguel').delete();
+    if (isValidUuid(id)) await q1.eq('id', id);
+    else await q1.eq('nome', name || id);
+  } catch (_) {}
+
+  try {
+    const q2 = supabase.from('tipos_agendamento').delete();
+    if (isValidUuid(id)) await q2.eq('id', id);
+    else await q2.eq('nome', name || id);
+  } catch (_) {}
+}
+

@@ -44,12 +44,12 @@ interface BookingModalProps {
 export default function BookingModal({
   isOpen,
   onClose,
-  courts,
+  courts = [],
   bookings,
-  rentalTypes = INITIAL_RENTAL_TYPES,
-  sports = INITIAL_SPORTS,
-  teachers = INITIAL_TEACHERS,
-  students = INITIAL_STUDENTS,
+  rentalTypes = [],
+  sports = [],
+  teachers = [],
+  students = [],
   selectedDate,
   presetCourtId,
   presetStartTime,
@@ -58,6 +58,64 @@ export default function BookingModal({
   onDeleteBooking,
   isAdmin = true
 }: BookingModalProps) {
+  // Helper to normalize teacher/student names for matching
+  const normalizePersonName = (n?: string) => {
+    if (!n) return '';
+    return n
+      .toLowerCase()
+      .replace(/^(prof\.|profa\.|professor|professora)\s+/i, '')
+      .trim();
+  };
+
+  const findTeacher = (
+    rawId?: string,
+    rawName?: string,
+    rawCustomerName?: string,
+    teacherList: Teacher[] = []
+  ): Teacher | undefined => {
+    if (!teacherList || teacherList.length === 0) return undefined;
+
+    // 1. Direct ID match
+    if (rawId) {
+      const byId = teacherList.find(t => t.id === rawId);
+      if (byId) return byId;
+    }
+
+    // 2. Try match if rawId itself is a name string
+    if (rawId) {
+      const normRawId = normalizePersonName(rawId);
+      if (normRawId) {
+        const byIdName = teacherList.find(t => normalizePersonName(t.name) === normRawId);
+        if (byIdName) return byIdName;
+      }
+    }
+
+    // 3. Match by teacherName
+    if (rawName) {
+      const normName = normalizePersonName(rawName);
+      if (normName) {
+        const byName = teacherList.find(t => {
+          const tNorm = normalizePersonName(t.name);
+          return tNorm === normName || tNorm.includes(normName) || normName.includes(tNorm);
+        });
+        if (byName) return byName;
+      }
+    }
+
+    // 4. Match by customerName
+    if (rawCustomerName) {
+      const normCust = normalizePersonName(rawCustomerName);
+      if (normCust) {
+        const byCust = teacherList.find(t => {
+          const tNorm = normalizePersonName(t.name);
+          return tNorm === normCust || tNorm.includes(normCust) || normCust.includes(tNorm);
+        });
+        if (byCust) return byCust;
+      }
+    }
+
+    return undefined;
+  };
   
   // Fields state
   const [courtId, setCourtId] = useState('');
@@ -66,8 +124,8 @@ export default function BookingModal({
   const [date, setDate] = useState('');
   const [startTime, setStartTime] = useState('08:00');
   const [endTime, setEndTime] = useState('09:00');
-  const [sport, setSport] = useState<SportType>('Vôlei de Areia');
-  const [bookingType, setBookingType] = useState<BookingType>('Aluguel');
+  const [sport, setSport] = useState<SportType>((sports[0]?.name as SportType) || '');
+  const [bookingType, setBookingType] = useState<BookingType>((rentalTypes[0]?.name as BookingType) || '');
   const [teacherId, setTeacherId] = useState('');
   const [teacherName, setTeacherName] = useState('');
   const [studentId, setStudentId] = useState('');
@@ -120,8 +178,18 @@ export default function BookingModal({
         setEndTime(editingBooking.endTime);
         setSport(editingBooking.sport);
         setBookingType(editingBooking.bookingType || 'Aluguel');
-        setTeacherId(editingBooking.teacherId || '');
-        setTeacherName(editingBooking.teacherName || '');
+        
+        const matchedT = findTeacher(
+          editingBooking.teacherId,
+          editingBooking.teacherName,
+          editingBooking.customerName,
+          teachers
+        );
+        const resolvedTeacherId = matchedT ? matchedT.id : (editingBooking.teacherId || '');
+        const resolvedTeacherName = matchedT ? matchedT.name : (editingBooking.teacherName || editingBooking.customerName || '');
+
+        setTeacherId(resolvedTeacherId);
+        setTeacherName(resolvedTeacherName);
         setStudentId(editingBooking.studentId || '');
         setStudentName(editingBooking.studentName || '');
         
@@ -154,8 +222,8 @@ export default function BookingModal({
         const nextHourStr = `${nextHourNum.toString().padStart(2, '0')}:00`;
         setEndTime(nextHourStr);
         
-        setSport('Vôlei de Areia');
-        setBookingType('Aluguel');
+        setSport((sports[0]?.name as SportType) || '');
+        setBookingType((rentalTypes[0]?.name as BookingType) || '');
         setTeacherId('');
         setTeacherName('');
         setStudentId('');
@@ -169,6 +237,22 @@ export default function BookingModal({
       }
     }
   }, [isOpen, editingBooking, presetCourtId, presetStartTime, selectedDate, courts]);
+
+  // Re-resolve teacher if teachers array updates or modal opens
+  useEffect(() => {
+    if (isOpen && (editingBooking || teacherId || teacherName)) {
+      const matched = findTeacher(
+        teacherId || editingBooking?.teacherId,
+        teacherName || editingBooking?.teacherName,
+        customerName || editingBooking?.customerName,
+        teachers
+      );
+      if (matched && matched.id !== teacherId) {
+        setTeacherId(matched.id);
+        setTeacherName(matched.name);
+      }
+    }
+  }, [teachers, isOpen]);
 
   const handleAddSelectedStudent = (studentIdVal: string) => {
     if (!studentIdVal) return;
@@ -253,11 +337,11 @@ export default function BookingModal({
       endTime,
       sport,
       bookingType,
-      teacherId: isClassBooking ? (teacherId || undefined) : undefined,
-      teacherName: isClassBooking ? (teacherName || undefined) : undefined,
-      students: isClassBooking ? selectedStudents : undefined,
-      studentId: isClassBooking ? (selectedStudents[0]?.studentId || undefined) : undefined,
-      studentName: isClassBooking ? (selectedStudents[0]?.studentName || undefined) : undefined,
+      teacherId: teacherId || undefined,
+      teacherName: teacherName || undefined,
+      students: selectedStudents.length > 0 ? selectedStudents : (isClassBooking ? selectedStudents : undefined),
+      studentId: selectedStudents[0]?.studentId || studentId || undefined,
+      studentName: selectedStudents[0]?.studentName || studentName || undefined,
       totalValue,
       paymentStatus,
       paymentMethod,
@@ -378,11 +462,20 @@ export default function BookingModal({
                   onChange={(e) => setCourtId(e.target.value)}
                   className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-semibold text-slate-700 cursor-pointer"
                 >
-                  {courts.map((court) => (
-                    <option key={court.id} value={court.id}>
-                      {court.name} ({court.type})
+                  {courts.length === 0 ? (
+                    <option value="">-- Nenhuma Quadra Cadastrada --</option>
+                  ) : (
+                    courts.map((court) => (
+                      <option key={court.id} value={court.id}>
+                        {court.name} ({court.type})
+                      </option>
+                    ))
+                  )}
+                  {courtId && !courts.some(c => c.id === courtId) && (
+                    <option value={courtId}>
+                      {editingBooking?.courtId === courtId ? 'Quadra do agendamento' : courtId}
                     </option>
-                  ))}
+                  )}
                 </select>
               </div>
               <div className="relative">
@@ -392,11 +485,20 @@ export default function BookingModal({
                   onChange={(e) => setSport(e.target.value as SportType)}
                   className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-semibold text-slate-700 cursor-pointer"
                 >
-                  {sports.map((s) => (
-                    <option key={s.id} value={s.name}>
-                      🏆 {s.name}
+                  {sports.length === 0 ? (
+                    <option value="">-- Nenhum Esporte Cadastrado --</option>
+                  ) : (
+                    sports.map((s) => (
+                      <option key={s.id} value={s.name}>
+                        🏆 {s.name}
+                      </option>
+                    ))
+                  )}
+                  {sport && !sports.some(s => s.name === sport) && (
+                    <option value={sport}>
+                      🏆 {sport}
                     </option>
-                  ))}
+                  )}
                 </select>
               </div>
               <div className="relative">
@@ -406,11 +508,20 @@ export default function BookingModal({
                   onChange={(e) => setBookingType(e.target.value as BookingType)}
                   className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-semibold text-slate-700 cursor-pointer"
                 >
-                  {rentalTypes.map((rt) => (
-                    <option key={rt.id} value={rt.name}>
-                      📌 {rt.name}
+                  {rentalTypes.length === 0 ? (
+                    <option value="">-- Nenhum Tipo Cadastrado --</option>
+                  ) : (
+                    rentalTypes.map((rt) => (
+                      <option key={rt.id} value={rt.name}>
+                        📌 {rt.name}
+                      </option>
+                    ))
+                  )}
+                  {bookingType && !rentalTypes.some(rt => rt.name === bookingType) && (
+                    <option value={bookingType}>
+                      📌 {bookingType}
                     </option>
-                  ))}
+                  )}
                 </select>
               </div>
             </div>
@@ -458,6 +569,11 @@ export default function BookingModal({
                       👨‍🏫 {t.name} ({t.sport})
                     </option>
                   ))}
+                  {teacherId && !teachers.some(t => t.id === teacherId) && (
+                    <option value={teacherId}>
+                      👨‍🏫 {teacherName || teacherId}
+                    </option>
+                  )}
                 </select>
               </div>
 
