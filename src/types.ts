@@ -58,6 +58,10 @@ export interface Booking {
   endTime: string; // HH:MM
   sport: SportType;
   bookingType?: BookingType;
+  teacherId?: string;
+  teacherName?: string;
+  studentId?: string;
+  studentName?: string;
   totalValue: number;
   paymentStatus: PaymentStatus;
   paymentMethod: PaymentMethod;

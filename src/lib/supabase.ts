@@ -267,6 +267,10 @@ export async function dbGetBookings(): Promise<Booking[]> {
       endTime: formatTime(b.horario_fim),
       sport: b.esporte,
       bookingType: bookingType,
+      teacherId: b.professor_id || undefined,
+      teacherName: b.professor_nome || undefined,
+      studentId: b.aluno_id || undefined,
+      studentName: b.aluno_nome || undefined,
       totalValue: Number(b.valor_total),
       paymentStatus: b.status_pagamento,
       paymentMethod: b.metodo_pagamento,
@@ -325,6 +329,19 @@ export async function dbSaveBooking(booking: Booking): Promise<Booking | null> {
     metodo_pagamento: metodo_pagamento,
     observacoes: observacoes || null,
   };
+
+  if (booking.teacherId && isValidUuid(booking.teacherId)) {
+    dbBooking.professor_id = booking.teacherId;
+  }
+  if (booking.teacherName) {
+    dbBooking.professor_nome = booking.teacherName;
+  }
+  if (booking.studentId && isValidUuid(booking.studentId)) {
+    dbBooking.aluno_id = booking.studentId;
+  }
+  if (booking.studentName) {
+    dbBooking.aluno_nome = booking.studentName;
+  }
 
   // Se o ID for um UUID válido do banco, inclui para atualização (UPDATE)
   if (isValidUuid(booking.id)) {

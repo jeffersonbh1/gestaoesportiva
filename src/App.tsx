@@ -866,6 +866,8 @@ export default function App() {
             bookings={bookings}
             rentalTypes={rentalTypes}
             sports={sports}
+            teachers={teachers}
+            students={students}
             selectedDate={selectedDate}
             presetCourtId={presetCourtId}
             presetStartTime={presetStartTime}

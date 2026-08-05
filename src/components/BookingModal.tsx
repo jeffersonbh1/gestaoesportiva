@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Court, Booking, Player, SportType, BookingType, PaymentStatus, PaymentMethod, RentalType, Sport } from '../types';
-import { INITIAL_RENTAL_TYPES, INITIAL_SPORTS } from '../data/mockData';
+import { Court, Booking, Player, SportType, BookingType, PaymentStatus, PaymentMethod, RentalType, Sport, Teacher, Student } from '../types';
+import { INITIAL_RENTAL_TYPES, INITIAL_SPORTS, INITIAL_TEACHERS, INITIAL_STUDENTS } from '../data/mockData';
 import { TIME_SLOTS, formatCurrency, getBookingOverlap, formatPhoneNumber, timeToMinutes } from '../utils';
 import { 
   X, 
@@ -16,7 +16,9 @@ import {
   BookmarkCheck,
   Smartphone,
   Trash2,
-  Wrench
+  Wrench,
+  GraduationCap,
+  UserCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -27,6 +29,8 @@ interface BookingModalProps {
   bookings: Booking[];
   rentalTypes?: RentalType[];
   sports?: Sport[];
+  teachers?: Teacher[];
+  students?: Student[];
   selectedDate: string;
   presetCourtId?: string;
   presetStartTime?: string;
@@ -43,6 +47,8 @@ export default function BookingModal({
   bookings,
   rentalTypes = INITIAL_RENTAL_TYPES,
   sports = INITIAL_SPORTS,
+  teachers = INITIAL_TEACHERS,
+  students = INITIAL_STUDENTS,
   selectedDate,
   presetCourtId,
   presetStartTime,
@@ -61,6 +67,10 @@ export default function BookingModal({
   const [endTime, setEndTime] = useState('09:00');
   const [sport, setSport] = useState<SportType>('Vôlei de Areia');
   const [bookingType, setBookingType] = useState<BookingType>('Aluguel');
+  const [teacherId, setTeacherId] = useState('');
+  const [teacherName, setTeacherName] = useState('');
+  const [studentId, setStudentId] = useState('');
+  const [studentName, setStudentName] = useState('');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Pendente');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Pix');
   const [notes, setNotes] = useState('');
@@ -108,6 +118,10 @@ export default function BookingModal({
         setEndTime(editingBooking.endTime);
         setSport(editingBooking.sport);
         setBookingType(editingBooking.bookingType || 'Aluguel');
+        setTeacherId(editingBooking.teacherId || '');
+        setTeacherName(editingBooking.teacherName || '');
+        setStudentId(editingBooking.studentId || '');
+        setStudentName(editingBooking.studentName || '');
         setPaymentStatus(editingBooking.paymentStatus);
         setPaymentMethod(editingBooking.paymentMethod);
         setNotes(editingBooking.notes || '');
@@ -128,6 +142,10 @@ export default function BookingModal({
         
         setSport('Vôlei de Areia');
         setBookingType('Aluguel');
+        setTeacherId('');
+        setTeacherName('');
+        setStudentId('');
+        setStudentName('');
         setPaymentStatus('Pendente');
         setPaymentMethod('Pix');
         setNotes('');
@@ -180,11 +198,21 @@ export default function BookingModal({
 
   }, [courtId, date, startTime, endTime, bookings, courts, editingBooking, isCustomPrice, bookingType]);
 
+  const isClassBooking = (bookingType || '').toLowerCase().includes('aula');
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (overlapWarning) return;
-    const finalCustomerName = customerName.trim() || (bookingType === 'Manutenção' ? 'Manutenção da Quadra' : '');
-    const finalCustomerPhone = customerPhone.trim() || (bookingType === 'Manutenção' ? '-' : '');
+    
+    let finalCustomerName = customerName.trim();
+    if (!finalCustomerName) {
+      if (isClassBooking) {
+        finalCustomerName = studentName ? `Aluno: ${studentName}` : 'Aluno de Aula';
+      } else if (bookingType === 'Manutenção') {
+        finalCustomerName = 'Manutenção da Quadra';
+      }
+    }
+    const finalCustomerPhone = customerPhone.trim() || (bookingType === 'Manutenção' || isClassBooking ? '-' : '');
     if (!finalCustomerName) return;
 
     const saved: Booking = {
@@ -197,6 +225,10 @@ export default function BookingModal({
       endTime,
       sport,
       bookingType,
+      teacherId: isClassBooking ? (teacherId || undefined) : undefined,
+      teacherName: isClassBooking ? (teacherName || undefined) : undefined,
+      studentId: isClassBooking ? (studentId || undefined) : undefined,
+      studentName: isClassBooking ? (studentName || undefined) : undefined,
       totalValue,
       paymentStatus,
       paymentMethod,
@@ -354,6 +386,81 @@ export default function BookingModal({
               </div>
             </div>
           </div>
+
+          {/* Professor & Aluno Section (Enabled when bookingType contains Aula) */}
+          {isClassBooking && (
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="p-4 bg-blue-50/80 border border-blue-200 rounded-2xl space-y-3"
+            >
+              <div className="flex items-center gap-2 text-blue-900 font-bold text-xs uppercase tracking-wider">
+                <GraduationCap className="h-4 w-4 text-blue-600" />
+                <span>Vínculo de Aula (Professor & Aluno)</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Professor */}
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1 flex items-center gap-1">
+                    <UserCheck className="h-3.5 w-3.5 text-blue-600" />
+                    Professor *
+                  </label>
+                  <select
+                    value={teacherId}
+                    onChange={(e) => {
+                      const idVal = e.target.value;
+                      setTeacherId(idVal);
+                      const found = teachers.find(t => t.id === idVal);
+                      setTeacherName(found ? found.name : idVal);
+                    }}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value="">-- Selecione o Professor --</option>
+                    {teachers.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        👨‍🏫 {t.name} ({t.sport})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Aluno */}
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1 flex items-center gap-1">
+                    <User className="h-3.5 w-3.5 text-blue-600" />
+                    Aluno Contratante *
+                  </label>
+                  <select
+                    value={studentId}
+                    onChange={(e) => {
+                      const idVal = e.target.value;
+                      setStudentId(idVal);
+                      const found = students.find(s => s.id === idVal);
+                      if (found) {
+                        setStudentName(found.name);
+                        if (!customerName) setCustomerName(found.name);
+                        if (!customerPhone && found.phone) setCustomerPhone(found.phone);
+                        if (found.teacherId && !teacherId) {
+                          setTeacherId(found.teacherId);
+                          setTeacherName(found.teacherName || '');
+                        }
+                      } else {
+                        setStudentName(idVal);
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value="">-- Selecione o Aluno --</option>
+                    {students.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        🎓 {s.name} ({s.sport} - {s.level})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </motion.div>
+          )}
 
           {/* Date & Time Grid */}
           <div className="space-y-3">

@@ -68,6 +68,46 @@ CREATE TABLE IF NOT EXISTS agendamentos (
 
 -- Garantir coluna tipo_agendamento se a tabela já existir
 ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS tipo_agendamento VARCHAR(50) DEFAULT 'Aluguel';
+ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS professor_id UUID REFERENCES professores(id) ON DELETE SET NULL;
+ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS professor_nome VARCHAR(100);
+ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS aluno_id UUID REFERENCES alunos(id) ON DELETE SET NULL;
+ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS aluno_nome VARCHAR(100);
+
+-- ====================================================================
+-- 3B. TABELA: professores
+-- Funcionalidade: Cadastro e Gestão de Professores/Instrutores
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS professores (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nome VARCHAR(100) NOT NULL,
+    email VARCHAR(100),
+    telefone VARCHAR(20) NOT NULL,
+    esporte VARCHAR(50) NOT NULL,
+    valor_hora NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    disponivel BOOLEAN NOT NULL DEFAULT TRUE,
+    criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE professores IS 'Tabela de cadastro e gestão dos professores e instrutores de esportes da arena.';
+
+-- ====================================================================
+-- 3C. TABELA: alunos
+-- Funcionalidade: Cadastro e Gestão de Alunos Convocados/Matriculados
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS alunos (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nome VARCHAR(100) NOT NULL,
+    email VARCHAR(100),
+    telefone VARCHAR(20) NOT NULL,
+    esporte VARCHAR(50) NOT NULL,
+    nivel VARCHAR(30) DEFAULT 'Iniciante' CHECK (nivel IN ('Iniciante', 'Intermediário', 'Avançado')),
+    professor_id UUID REFERENCES professores(id) ON DELETE SET NULL,
+    professor_nome VARCHAR(100),
+    status VARCHAR(20) DEFAULT 'Ativo' CHECK (status IN ('Ativo', 'Inativo')),
+    criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE alunos IS 'Tabela de cadastro e gestão dos alunos das aulas da arena.';
 
 -- ====================================================================
 -- 3B. TABELA: esportes
@@ -105,6 +145,8 @@ ALTER TABLE jogadores_racha DISABLE ROW LEVEL SECURITY;
 ALTER TABLE avaliacoes_jogadores DISABLE ROW LEVEL SECURITY;
 ALTER TABLE esportes DISABLE ROW LEVEL SECURITY;
 ALTER TABLE tipos_quadra DISABLE ROW LEVEL SECURITY;
+ALTER TABLE professores DISABLE ROW LEVEL SECURITY;
+ALTER TABLE alunos DISABLE ROW LEVEL SECURITY;
 
 CREATE INDEX IF NOT EXISTS idx_agendamentos_data ON agendamentos(data);
 CREATE INDEX IF NOT EXISTS idx_agendamentos_quadra ON agendamentos(quadra_id);
