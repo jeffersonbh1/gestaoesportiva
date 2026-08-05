@@ -19,7 +19,9 @@ import {
   dbSaveCourtType,
   dbDeleteCourtType,
   dbGetTeachers,
-  dbGetStudents
+  dbSaveTeacher,
+  dbGetStudents,
+  dbSaveStudent
 } from './lib/supabase';
 import Dashboard from './components/Dashboard';
 import CourtGrid from './components/CourtGrid';
@@ -371,24 +373,48 @@ export default function App() {
     setRentalTypes((prev) => prev.filter((r) => r.id !== id));
   };
 
-  const handleAddTeacher = (teacher: Teacher) => {
+  const handleAddTeacher = async (teacher: Teacher) => {
     setTeachers((prev) => {
       const exists = prev.some((t) => t.id === teacher.id);
       if (exists) return prev.map((t) => (t.id === teacher.id ? teacher : t));
       return [...prev, teacher];
     });
+
+    if (isSupabaseConfigured) {
+      try {
+        await dbSaveTeacher(teacher);
+        const updated = await dbGetTeachers();
+        if (updated.length > 0) setTeachers(updated);
+        setDbError(null);
+      } catch (err: any) {
+        console.error("Erro ao salvar professor no Supabase:", err);
+        setDbError(`Erro ao salvar professor no Supabase: ${err.message || 'Erro desconhecido'}`);
+      }
+    }
   };
 
   const handleDeleteTeacher = (id: string) => {
     setTeachers((prev) => prev.filter((t) => t.id !== id));
   };
 
-  const handleAddStudent = (student: Student) => {
+  const handleAddStudent = async (student: Student) => {
     setStudents((prev) => {
       const exists = prev.some((s) => s.id === student.id);
       if (exists) return prev.map((s) => (s.id === student.id ? student : s));
       return [...prev, student];
     });
+
+    if (isSupabaseConfigured) {
+      try {
+        await dbSaveStudent(student);
+        const updated = await dbGetStudents();
+        if (updated.length > 0) setStudents(updated);
+        setDbError(null);
+      } catch (err: any) {
+        console.error("Erro ao salvar aluno no Supabase:", err);
+        setDbError(`Erro ao salvar aluno no Supabase: ${err.message || 'Erro desconhecido'}`);
+      }
+    }
   };
 
   const handleDeleteStudent = (id: string) => {

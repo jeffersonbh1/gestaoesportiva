@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { Court, Booking, BookingStudent, User, Player, PlayerRating, Sport, CourtTypeItem, Teacher, Student } from '../types';
+import { INITIAL_TEACHERS, INITIAL_STUDENTS } from '../data/mockData';
 
 const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
 const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
@@ -115,24 +116,26 @@ export async function dbDeleteUser(userId: string): Promise<void> {
 
 // Helper para garantir UUID de professor no Supabase
 async function ensureTeacherUuid(teacherId?: string, teacherName?: string, sport?: string): Promise<string | null> {
+  if (!supabase) return null;
   if (teacherId && isValidUuid(teacherId)) return teacherId;
   if (!teacherName || !teacherName.trim()) return null;
 
   const cleanName = teacherName.trim();
+  const simpleName = cleanName.replace(/^(prof\.|profa\.|professor|professora)\s+/i, '').trim();
 
   try {
-    // 1. Tenta buscar pelo nome na tabela professores
+    // 1. Tenta buscar pelo nome na tabela professores (nome exato ou sem prefixo Prof.)
     const { data } = await supabase
       .from('professores')
-      .select('id')
-      .ilike('nome', cleanName)
+      .select('id, nome')
+      .or(`nome.ilike.${cleanName},nome.ilike.%${simpleName}%`)
       .limit(1);
 
-    if (data && data[0]) {
+    if (data && data.length > 0) {
       return data[0].id;
     }
 
-    // 2. Se não encontrou, insere novo professor na tabela professores para gerar UUID
+    // 2. Se não encontrou, insere novo professor na tabela professores para obter UUID
     const { data: inserted, error } = await supabase
       .from('professores')
       .insert({
@@ -140,11 +143,14 @@ async function ensureTeacherUuid(teacherId?: string, teacherName?: string, sport
         esporte: sport || 'Futevôlei',
         status: 'Ativo'
       })
-      .select('id')
-      .single();
+      .select('id');
 
-    if (inserted) return inserted.id;
-    if (error) console.warn('Aviso ao inserir professor em professores:', error);
+    if (error) {
+      console.warn('Aviso ao auto-criar professor em professores:', error);
+    }
+    if (inserted && inserted.length > 0) {
+      return inserted[0].id;
+    }
   } catch (err) {
     console.warn('Erro em ensureTeacherUuid:', err);
   }
@@ -154,6 +160,7 @@ async function ensureTeacherUuid(teacherId?: string, teacherName?: string, sport
 
 // Helper para garantir UUID de aluno no Supabase
 async function ensureStudentUuid(studentId?: string, studentName?: string, sport?: string, teacherIdUuid?: string | null): Promise<string | null> {
+  if (!supabase) return null;
   if (studentId && isValidUuid(studentId)) return studentId;
   if (!studentName || !studentName.trim()) return null;
 
@@ -163,32 +170,35 @@ async function ensureStudentUuid(studentId?: string, studentName?: string, sport
     // 1. Tenta buscar pelo nome na tabela alunos
     const { data } = await supabase
       .from('alunos')
-      .select('id')
-      .ilike('nome', cleanName)
+      .select('id, nome')
+      .ilike('nome', `%${cleanName}%`)
       .limit(1);
 
-    if (data && data[0]) {
+    if (data && data.length > 0) {
       return data[0].id;
     }
 
-    // 2. Se não encontrou, insere novo aluno na tabela alunos para gerar UUID
+    // 2. Se não encontrou, insere novo aluno na tabela alunos para obter UUID
     const studentPayload: any = {
       nome: cleanName,
       esporte: sport || 'Futevôlei',
       status: 'Ativo'
     };
-    if (teacherIdUuid) {
+    if (teacherIdUuid && isValidUuid(teacherIdUuid)) {
       studentPayload.professor_id = teacherIdUuid;
     }
 
     const { data: inserted, error } = await supabase
       .from('alunos')
       .insert(studentPayload)
-      .select('id')
-      .single();
+      .select('id');
 
-    if (inserted) return inserted.id;
-    if (error) console.warn('Aviso ao inserir aluno em alunos:', error);
+    if (error) {
+      console.warn('Aviso ao auto-criar aluno em alunos:', error);
+    }
+    if (inserted && inserted.length > 0) {
+      return inserted[0].id;
+    }
   } catch (err) {
     console.warn('Erro em ensureStudentUuid:', err);
   }
@@ -211,6 +221,38 @@ export async function dbGetTeachers(): Promise<Teacher[]> {
     if (error) {
       console.error('Erro ao buscar professores do Supabase:', error);
       return [];
+    }
+
+    if (!data || data.length === 0) {
+      // Popular tabela professores com os iniciais
+      const toInsert = INITIAL_TEACHERS.map((t) => ({
+        nome: t.name,
+        telefone: t.phone || null,
+        esporte: t.sport || 'Futevôlei',
+        email: t.email || null,
+        preco_aula: Number(t.pricePerClass) || 0,
+        status: t.status || 'Ativo',
+        observacoes: t.notes || null,
+      }));
+      await supabase.from('professores').insert(toInsert);
+
+      const { data: reData } = await supabase
+        .from('professores')
+        .select('*')
+        .order('nome', { ascending: true });
+
+      if (reData && reData.length > 0) {
+        return reData.map((p) => ({
+          id: p.id,
+          name: p.nome,
+          phone: p.telefone || '',
+          sport: p.esporte || 'Futevôlei',
+          email: p.email || undefined,
+          pricePerClass: Number(p.preco_aula) || 0,
+          status: p.status || 'Ativo',
+          notes: p.observacoes || undefined,
+        }));
+      }
     }
 
     return (data || []).map((p) => ({
@@ -284,6 +326,37 @@ export async function dbGetStudents(): Promise<Student[]> {
     if (error) {
       console.error('Erro ao buscar alunos do Supabase:', error);
       return [];
+    }
+
+    if (!data || data.length === 0) {
+      // Popular tabela alunos com os iniciais
+      const toInsert = INITIAL_STUDENTS.map((s) => ({
+        nome: s.name,
+        telefone: s.phone || null,
+        esporte: s.sport || 'Futevôlei',
+        nivel: s.level || 'Iniciante',
+        status: s.status || 'Ativo',
+      }));
+      await supabase.from('alunos').insert(toInsert);
+
+      const { data: reData } = await supabase
+        .from('alunos')
+        .select('*, professores(nome)')
+        .order('nome', { ascending: true });
+
+      if (reData && reData.length > 0) {
+        return reData.map((a) => ({
+          id: a.id,
+          name: a.nome,
+          phone: a.telefone || '',
+          sport: a.esporte || 'Futevôlei',
+          level: a.nivel || 'Iniciante',
+          teacherId: a.professor_id || undefined,
+          teacherName: a.professores?.nome || undefined,
+          status: a.status || 'Ativo',
+          notes: a.observacoes || undefined,
+        }));
+      }
     }
 
     return (data || []).map((a) => ({
