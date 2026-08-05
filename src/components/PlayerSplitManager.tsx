@@ -240,6 +240,9 @@ export default function PlayerSplitManager({ bookings, courts, onSaveBooking }: 
     text += `⏰ *Horário:* ${selectedBooking.startTime} às ${selectedBooking.endTime}\n`;
     text += `🏟️ *Quadra:* ${selectedCourt?.name || 'Quadra Esportiva'}\n`;
     text += `🏆 *Esporte:* ${selectedBooking.sport}\n`;
+    if (selectedBooking.bookingType) {
+      text += `📌 *Tipo:* ${selectedBooking.bookingType}\n`;
+    }
     text += `💰 *Valor Total da Quadra:* ${formatCurrency(totalValue)}\n`;
     
     if (isEqualSplit) {
@@ -404,6 +407,11 @@ export default function PlayerSplitManager({ bookings, courts, onSaveBooking }: 
                     <span className="px-2.5 py-0.5 bg-blue-50 text-blue-600 rounded-full text-[10px] font-bold">
                       {selectedBooking.sport}
                     </span>
+                    {selectedBooking.bookingType && (
+                      <span className="px-2.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[10px] font-bold">
+                        {selectedBooking.bookingType}
+                      </span>
+                    )}
                     <span className="text-xs font-mono font-semibold text-slate-500">
                       📅 {selectedBooking.date.split('-').reverse().join('/')} • ⏰ {selectedBooking.startTime} às {selectedBooking.endTime}
                     </span>

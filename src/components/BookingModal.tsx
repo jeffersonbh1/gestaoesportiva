@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Court, Booking, Player, SportType, PaymentStatus, PaymentMethod } from '../types';
+import { Court, Booking, Player, SportType, BookingType, PaymentStatus, PaymentMethod, RentalType } from '../types';
+import { INITIAL_RENTAL_TYPES } from '../data/mockData';
 import { TIME_SLOTS, formatCurrency, getBookingOverlap, formatPhoneNumber, timeToMinutes } from '../utils';
 import { 
   X, 
@@ -15,7 +16,7 @@ import {
   BookmarkCheck,
   Smartphone,
   Trash2,
-  Users
+  Wrench
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -24,6 +25,7 @@ interface BookingModalProps {
   onClose: () => void;
   courts: Court[];
   bookings: Booking[];
+  rentalTypes?: RentalType[];
   selectedDate: string;
   presetCourtId?: string;
   presetStartTime?: string;
@@ -38,6 +40,7 @@ export default function BookingModal({
   onClose,
   courts,
   bookings,
+  rentalTypes = INITIAL_RENTAL_TYPES,
   selectedDate,
   presetCourtId,
   presetStartTime,
@@ -55,6 +58,7 @@ export default function BookingModal({
   const [startTime, setStartTime] = useState('08:00');
   const [endTime, setEndTime] = useState('09:00');
   const [sport, setSport] = useState<SportType>('Vôlei de Areia');
+  const [bookingType, setBookingType] = useState<BookingType>('Aluguel');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Pendente');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Pix');
   const [notes, setNotes] = useState('');
@@ -62,6 +66,7 @@ export default function BookingModal({
   
   // Real-time calculated price
   const [totalValue, setTotalValue] = useState(0);
+  const [isCustomPrice, setIsCustomPrice] = useState(false);
   const [overlapWarning, setOverlapWarning] = useState<string | null>(null);
 
   // Safe delete state instead of native confirm()
@@ -79,10 +84,13 @@ export default function BookingModal({
         setStartTime(editingBooking.startTime);
         setEndTime(editingBooking.endTime);
         setSport(editingBooking.sport);
+        setBookingType(editingBooking.bookingType || 'Aluguel');
         setPaymentStatus(editingBooking.paymentStatus);
         setPaymentMethod(editingBooking.paymentMethod);
         setNotes(editingBooking.notes || '');
         setPlayers(editingBooking.players || []);
+        setTotalValue(editingBooking.totalValue ?? 0);
+        setIsCustomPrice(true);
       } else {
         setCourtId(presetCourtId || courts[0]?.id || '');
         setCustomerName('');
@@ -96,10 +104,12 @@ export default function BookingModal({
         setEndTime(nextHourStr);
         
         setSport('Vôlei de Areia');
+        setBookingType('Aluguel');
         setPaymentStatus('Pendente');
         setPaymentMethod('Pix');
         setNotes('');
         setPlayers([]);
+        setIsCustomPrice(false);
       }
     }
   }, [isOpen, editingBooking, presetCourtId, presetStartTime, selectedDate, courts]);
@@ -114,10 +124,14 @@ export default function BookingModal({
     const endMin = timeToMinutes(endTime);
     const diffHours = (endMin - startMin) / 60;
 
-    if (diffHours > 0) {
-      setTotalValue(diffHours * selectedCourt.pricePerHour);
-    } else {
-      setTotalValue(0);
+    if (!isCustomPrice) {
+      if (bookingType === 'Manutenção') {
+        setTotalValue(0);
+      } else if (diffHours > 0) {
+        setTotalValue(diffHours * selectedCourt.pricePerHour);
+      } else {
+        setTotalValue(0);
+      }
     }
 
     // Overlap checks
@@ -141,22 +155,25 @@ export default function BookingModal({
       setOverlapWarning(null);
     }
 
-  }, [courtId, date, startTime, endTime, bookings, courts, editingBooking]);
+  }, [courtId, date, startTime, endTime, bookings, courts, editingBooking, isCustomPrice, bookingType]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (overlapWarning) return;
-    if (!customerName.trim()) return;
+    const finalCustomerName = customerName.trim() || (bookingType === 'Manutenção' ? 'Manutenção da Quadra' : '');
+    const finalCustomerPhone = customerPhone.trim() || (bookingType === 'Manutenção' ? '-' : '');
+    if (!finalCustomerName) return;
 
     const saved: Booking = {
       id: editingBooking?.id || `book-${Date.now()}`,
       courtId,
-      customerName,
-      customerPhone,
+      customerName: finalCustomerName,
+      customerPhone: finalCustomerPhone,
       date,
       startTime,
       endTime,
       sport,
+      bookingType,
       totalValue,
       paymentStatus,
       paymentMethod,
@@ -212,17 +229,45 @@ export default function BookingModal({
           
           {/* Customer Info */}
           <div className="space-y-3">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Informações do Cliente</span>
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Informações do Cliente</span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (bookingType === 'Manutenção') {
+                    setBookingType('Aluguel');
+                    setCustomerName('');
+                    setCustomerPhone('');
+                    setIsCustomPrice(false);
+                  } else {
+                    setBookingType('Manutenção');
+                    setCustomerName('Manutenção da Quadra');
+                    setCustomerPhone('-');
+                    setTotalValue(0);
+                    setIsCustomPrice(true);
+                  }
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  bookingType === 'Manutenção'
+                    ? 'bg-amber-500 text-stone-950 shadow-sm'
+                    : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'
+                }`}
+                title="Marcar este horário como manutenção ou bloqueio da quadra"
+              >
+                <Wrench className="h-3.5 w-3.5" />
+                {bookingType === 'Manutenção' ? '✔ Horário em Manutenção' : 'Marcar como Manutenção'}
+              </button>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="relative">
                 <User className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
                 <input 
                   type="text"
-                  placeholder="Nome do Cliente"
+                  placeholder={bookingType === 'Manutenção' ? "Motivo ou Descrição da Manutenção" : "Nome do Cliente"}
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                   className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-semibold text-slate-800"
-                  required
+                  required={bookingType !== 'Manutenção'}
                 />
               </div>
               <div className="relative">
@@ -238,10 +283,10 @@ export default function BookingModal({
             </div>
           </div>
 
-          {/* Court & Sport Selection */}
+          {/* Court, Sport & Booking Type Selection */}
           <div className="space-y-3">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Quadra & Modalidade</span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Quadra, Esporte & Tipo</span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="relative">
                 <MapPin className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
                 <select
@@ -267,6 +312,20 @@ export default function BookingModal({
                   <option value="Futevôlei">⚽ Futevôlei</option>
                   <option value="Beach Tennis">🎾 Beach Tennis</option>
                   <option value="Vôlei de Quadra">👟 Vôlei de Quadra</option>
+                </select>
+              </div>
+              <div className="relative">
+                <FileText className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                <select
+                  value={bookingType}
+                  onChange={(e) => setBookingType(e.target.value as BookingType)}
+                  className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-semibold text-slate-700 cursor-pointer"
+                >
+                  {rentalTypes.map((rt) => (
+                    <option key={rt.id} value={rt.name}>
+                      📌 {rt.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -370,149 +429,50 @@ export default function BookingModal({
               </div>
             </div>
 
-            {/* Price Preview */}
-            <div className="mt-3 pt-3 border-t border-slate-200 flex justify-between items-center">
-              <span className="text-xs font-bold text-slate-500">Faturamento Estimado:</span>
-              <span className="text-lg font-black text-slate-900">{formatCurrency(totalValue)}</span>
-            </div>
-          </div>
-
-          {/* Players List (for editing racha bookings or any booking with players) */}
-          {editingBooking && (
-            <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-200">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Users className="h-4 w-4 text-blue-500" /> 
-                  Jogadores do Racha ({players.length})
-                </span>
-                
-                {players.length > 0 && (
-                  <div className="flex gap-2 text-[10px] font-bold">
-                    <button
-                      type="button"
-                      onClick={() => setPlayers(prev => prev.map(p => ({ ...p, hasPaid: true })))}
-                      className="text-emerald-600 hover:underline cursor-pointer"
-                    >
-                      Todos Pagos
-                    </button>
-                    <span className="text-slate-300">|</span>
-                    <button
-                      type="button"
-                      onClick={() => setPlayers(prev => prev.map(p => ({ ...p, hasPaid: false })))}
-                      className="text-blue-600 hover:underline cursor-pointer"
-                    >
-                      Todos Pendentes
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {players.length === 0 ? (
-                <div className="text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                  <p className="text-[11px] font-semibold text-slate-400">Nenhum jogador cadastrado neste racha</p>
-                  <p className="text-[9px] text-slate-400 mt-0.5">Adicione jogadores abaixo ou gerencie na aba "Racha & Jogadores".</p>
-                </div>
-              ) : (
-                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                  {players.map((p) => (
-                    <div 
-                      key={p.id} 
-                      className="flex items-center justify-between p-2 bg-slate-50 rounded-xl border border-slate-100 text-xs"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <input
-                          type="checkbox"
-                          checked={p.hasPaid}
-                          onChange={() => {
-                            setPlayers(prev => prev.map(item => 
-                              item.id === p.id ? { ...item, hasPaid: !item.hasPaid } : item
-                            ));
-                          }}
-                          className="rounded border-slate-300 text-blue-500 focus:ring-blue-500 h-4 w-4 cursor-pointer"
-                          id={`player-check-${p.id}`}
-                        />
-                        <label 
-                          htmlFor={`player-check-${p.id}`}
-                          className={`font-semibold text-slate-700 truncate cursor-pointer ${p.hasPaid ? 'line-through text-slate-400' : ''}`}
-                        >
-                          {p.name}
-                        </label>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="font-bold text-slate-600">{formatCurrency(p.amount)}</span>
-                        <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold ${
-                          p.hasPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
-                        }`}>
-                          {p.hasPaid ? 'Pago' : 'Pendente'}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Quick Add Player Inline Form */}
-              <div className="pt-2 border-t border-slate-100">
-                <div className="flex gap-1.5">
-                  <input
-                    type="text"
-                    id="quick-player-name"
-                    placeholder="Nome do novo jogador..."
-                    className="flex-1 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const input = e.currentTarget;
-                        const name = input.value.trim();
-                        if (name) {
-                          const newPlayer: Player = {
-                            id: `player-${Date.now()}`,
-                            name,
-                            hasPaid: false,
-                            amount: players.length > 0 ? players[0].amount : Number((totalValue / 2).toFixed(2))
-                          };
-                          setPlayers(prev => {
-                            const updated = [...prev, newPlayer];
-                            // If they are equal split, let's recalculate split amount dynamically!
-                            const count = updated.length + 1; // plus contractor
-                            const equalAmt = Number((totalValue / count).toFixed(2));
-                            return updated.map(x => ({ ...x, amount: equalAmt }));
-                          });
-                          input.value = '';
-                        }
-                      }
-                    }}
-                  />
+            {/* Price Preview / Editable Rental Value */}
+            <div className="mt-3 pt-3 border-t border-slate-200 flex justify-between items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-700">Valor do Aluguel (R$):</span>
+                {isCustomPrice && (
                   <button
                     type="button"
                     onClick={() => {
-                      const input = document.getElementById('quick-player-name') as HTMLInputElement;
-                      const name = input?.value.trim();
-                      if (name) {
-                        const newPlayer: Player = {
-                          id: `player-${Date.now()}`,
-                          name,
-                          hasPaid: false,
-                          amount: players.length > 0 ? players[0].amount : Number((totalValue / 2).toFixed(2))
-                        };
-                        setPlayers(prev => {
-                          const updated = [...prev, newPlayer];
-                          const count = updated.length + 1; // plus contractor
-                          const equalAmt = Number((totalValue / count).toFixed(2));
-                          return updated.map(x => ({ ...x, amount: equalAmt }));
-                        });
-                        if (input) input.value = '';
+                      setIsCustomPrice(false);
+                      const selectedCourt = courts.find(c => c.id === courtId);
+                      const startMin = timeToMinutes(startTime);
+                      const endMin = timeToMinutes(endTime);
+                      const diffHours = (endMin - startMin) / 60;
+                      if (selectedCourt && diffHours > 0) {
+                        setTotalValue(diffHours * selectedCourt.pricePerHour);
+                      } else {
+                        setTotalValue(0);
                       }
                     }}
-                    className="px-2.5 py-1.5 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-lg text-xs transition cursor-pointer"
+                    className="text-[10px] text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-0.5 rounded-full font-semibold transition cursor-pointer"
+                    title="Restaurar valor automático da tabela da quadra"
                   >
-                    + Add
+                    Restaurar tabela
                   </button>
-                </div>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-bold text-slate-500">R$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={totalValue}
+                  onChange={(e) => {
+                    setTotalValue(Math.max(0, Number(e.target.value)));
+                    setIsCustomPrice(true);
+                  }}
+                  className="w-28 text-right text-base font-black text-slate-900 bg-white border border-slate-300 rounded-xl px-2.5 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-2xs font-mono"
+                  placeholder="0.00"
+                  title="Valor do aluguel (clique para editar)"
+                />
               </div>
             </div>
-          )}
+          </div>
 
           {/* Notes */}
           <div className="relative">

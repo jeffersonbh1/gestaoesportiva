@@ -238,9 +238,16 @@ export default function PaymentHistory({ bookings, courts, onUpdatePaymentStatus
 
                       {/* Esporte */}
                       <td className="py-4 px-4">
-                        <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[11px] font-bold">
-                          {b.sport}
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[11px] font-bold">
+                            {b.sport}
+                          </span>
+                          {b.bookingType && (
+                            <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded text-[10px] font-bold">
+                              {b.bookingType}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Forma de Pagamento */}
@@ -351,6 +358,12 @@ export default function PaymentHistory({ bookings, courts, onUpdatePaymentStatus
                     <span className="text-slate-400 font-bold">MODALIDADE</span>
                     <span className="text-slate-800 font-black">{selectedReceipt.sport}</span>
                   </div>
+                  {selectedReceipt.bookingType && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400 font-bold">TIPO DE AGENDAMENTO</span>
+                      <span className="text-slate-800 font-black">{selectedReceipt.bookingType}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">

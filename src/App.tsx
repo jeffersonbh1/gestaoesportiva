@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Court, Booking, CourtStatus, PaymentStatus, User } from './types';
-import { INITIAL_COURTS, getInitialBookings } from './data/mockData';
+import { Court, Booking, CourtStatus, PaymentStatus, User, RentalType, Teacher, Student } from './types';
+import { INITIAL_COURTS, getInitialBookings, INITIAL_RENTAL_TYPES, INITIAL_TEACHERS, INITIAL_STUDENTS } from './data/mockData';
 import { 
   isSupabaseConfigured,
   dbGetUsers,
@@ -82,6 +82,25 @@ export default function App() {
     return saved ? JSON.parse(saved) : getInitialBookings();
   });
 
+  const [rentalTypes, setRentalTypes] = useState<RentalType[]>(() => {
+    const saved = localStorage.getItem('arena_rental_types');
+    const parsed: RentalType[] = saved ? JSON.parse(saved) : INITIAL_RENTAL_TYPES;
+    if (!parsed.some(r => r.name === 'Manutenção')) {
+      return [...parsed, { id: 'rental-manutencao', name: 'Manutenção', description: 'Bloqueio de horário para manutenção ou limpeza da quadra', isDefault: true }];
+    }
+    return parsed;
+  });
+
+  const [teachers, setTeachers] = useState<Teacher[]>(() => {
+    const saved = localStorage.getItem('arena_teachers');
+    return saved ? JSON.parse(saved) : INITIAL_TEACHERS;
+  });
+
+  const [students, setStudents] = useState<Student[]>(() => {
+    const saved = localStorage.getItem('arena_students');
+    return saved ? JSON.parse(saved) : INITIAL_STUDENTS;
+  });
+
   // Base mock date set to '2026-07-07' to match the preset statistics perfectly
   const [selectedDate, setSelectedDate] = useState('2026-07-07');
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -147,6 +166,18 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('arena_bookings', JSON.stringify(bookings));
   }, [bookings]);
+
+  useEffect(() => {
+    localStorage.setItem('arena_rental_types', JSON.stringify(rentalTypes));
+  }, [rentalTypes]);
+
+  useEffect(() => {
+    localStorage.setItem('arena_teachers', JSON.stringify(teachers));
+  }, [teachers]);
+
+  useEffect(() => {
+    localStorage.setItem('arena_students', JSON.stringify(students));
+  }, [students]);
 
   // Handlers for user management actions
   const handleSaveUser = async (user: User) => {
@@ -278,6 +309,38 @@ export default function App() {
         console.error(err);
       }
     }
+  };
+
+  const handleAddRentalType = (item: RentalType) => {
+    setRentalTypes((prev) => [...prev, item]);
+  };
+
+  const handleDeleteRentalType = (id: string) => {
+    setRentalTypes((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  const handleAddTeacher = (teacher: Teacher) => {
+    setTeachers((prev) => {
+      const exists = prev.some((t) => t.id === teacher.id);
+      if (exists) return prev.map((t) => (t.id === teacher.id ? teacher : t));
+      return [...prev, teacher];
+    });
+  };
+
+  const handleDeleteTeacher = (id: string) => {
+    setTeachers((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const handleAddStudent = (student: Student) => {
+    setStudents((prev) => {
+      const exists = prev.some((s) => s.id === student.id);
+      if (exists) return prev.map((s) => (s.id === student.id ? student : s));
+      return [...prev, student];
+    });
+  };
+
+  const handleDeleteStudent = (id: string) => {
+    setStudents((prev) => prev.filter((s) => s.id !== id));
   };
 
   // Direct trigger when clicking an empty hour slot
@@ -622,6 +685,15 @@ export default function App() {
                 onAddCourt={handleAddCourt}
                 onUpdateCourtStatus={handleUpdateCourtStatus}
                 onDeleteCourt={handleDeleteCourt}
+                rentalTypes={rentalTypes}
+                onAddRentalType={handleAddRentalType}
+                onDeleteRentalType={handleDeleteRentalType}
+                teachers={teachers}
+                onAddTeacher={handleAddTeacher}
+                onDeleteTeacher={handleDeleteTeacher}
+                students={students}
+                onAddStudent={handleAddStudent}
+                onDeleteStudent={handleDeleteStudent}
                 isAdmin={currentUser.role === 'Administrador'}
               />
             </motion.div>
@@ -654,6 +726,7 @@ export default function App() {
             onClose={() => setIsModalOpen(false)}
             courts={courts}
             bookings={bookings}
+            rentalTypes={rentalTypes}
             selectedDate={selectedDate}
             presetCourtId={presetCourtId}
             presetStartTime={presetStartTime}

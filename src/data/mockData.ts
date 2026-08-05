@@ -1,4 +1,4 @@
-import { Court, Booking } from '../types';
+import { Court, Booking, RentalType, Teacher, Student } from '../types';
 
 export const INITIAL_COURTS: Court[] = [
   {
@@ -200,3 +200,60 @@ export const getInitialBookings = (): Booking[] => {
     }
   ];
 };
+
+export const INITIAL_RENTAL_TYPES: RentalType[] = [
+  { id: 'rental-1', name: 'Aluguel', description: 'Locação avulsa ou horista da quadra', isDefault: true },
+  { id: 'rental-2', name: 'Day-use', description: 'Uso liberado durante todo o período de funcionamento', isDefault: true },
+  { id: 'rental-3', name: 'Aula de futevôlei', description: 'Aula com professor especializado na modalidade futevôlei', isDefault: true },
+  { id: 'rental-4', name: 'Aula de beach tennis', description: 'Aula com professor especializado em beach tennis', isDefault: true },
+  { id: 'rental-5', name: 'Eventos', description: 'Reserva para eventos, torneios ou aniversários', isDefault: true },
+  { id: 'rental-6', name: 'Manutenção', description: 'Bloqueio de horário para manutenção ou limpeza da quadra', isDefault: true }
+];
+
+export const INITIAL_TEACHERS: Teacher[] = [
+  {
+    id: 'teacher-1',
+    name: 'Prof. Lucas Mendes',
+    phone: '(11) 99876-5432',
+    sport: 'Futevôlei',
+    email: 'lucas.mendes@arena.com',
+    pricePerClass: 120,
+    status: 'Ativo',
+    notes: 'Especialista em treino funcional de areia e técnica de futevôlei'
+  },
+  {
+    id: 'teacher-2',
+    name: 'Profa. Carolina Silva',
+    phone: '(11) 98765-4321',
+    sport: 'Beach Tennis',
+    email: 'carolina.silva@arena.com',
+    pricePerClass: 110,
+    status: 'Ativo',
+    notes: 'Ex-atleta profissional de Beach Tennis'
+  }
+];
+
+export const INITIAL_STUDENTS: Student[] = [
+  {
+    id: 'student-1',
+    name: 'Gabriel Santos',
+    phone: '(11) 97777-1111',
+    sport: 'Futevôlei',
+    teacherId: 'teacher-1',
+    teacherName: 'Prof. Lucas Mendes',
+    level: 'Intermediário',
+    status: 'Ativo',
+    monthlyFee: 240
+  },
+  {
+    id: 'student-2',
+    name: 'Mariana Costa',
+    phone: '(11) 96666-2222',
+    sport: 'Beach Tennis',
+    teacherId: 'teacher-2',
+    teacherName: 'Profa. Carolina Silva',
+    level: 'Iniciante',
+    status: 'Ativo',
+    monthlyFee: 220
+  }
+];

@@ -3,6 +3,7 @@ export type CourtStatus = 'Disponível' | 'Ocupada' | 'Manutenção';
 export type PaymentStatus = 'Pago' | 'Pendente' | 'Reembolsado';
 export type PaymentMethod = 'Pix' | 'Cartão de Crédito' | 'Cartão de Débito' | 'Dinheiro';
 export type SportType = 'Vôlei de Areia' | 'Futevôlei' | 'Vôlei de Quadra' | 'Beach Tennis';
+export type BookingType = 'Aluguel' | 'Day-use' | 'Aula de futevôlei' | 'Aula de beach tennis' | 'Eventos' | string;
 export type UserRole = 'Administrador' | 'Usuário';
 
 export interface User {
@@ -42,6 +43,7 @@ export interface Booking {
   startTime: string; // HH:MM
   endTime: string; // HH:MM
   sport: SportType;
+  bookingType?: BookingType;
   totalValue: number;
   paymentStatus: PaymentStatus;
   paymentMethod: PaymentMethod;
@@ -63,5 +65,35 @@ export interface PlayerRating {
   ratedPlayerName: string;
   rating: number; // 1 to 5 stars
   createdAt?: string;
+}
+
+export interface RentalType {
+  id: string;
+  name: string;
+  description?: string;
+  isDefault?: boolean;
+}
+
+export interface Teacher {
+  id: string;
+  name: string;
+  phone: string;
+  sport: string;
+  email?: string;
+  pricePerClass?: number;
+  status: 'Ativo' | 'Inativo';
+  notes?: string;
+}
+
+export interface Student {
+  id: string;
+  name: string;
+  phone: string;
+  sport: string;
+  teacherId?: string;
+  teacherName?: string;
+  level: 'Iniciante' | 'Intermediário' | 'Avançado';
+  status: 'Ativo' | 'Inativo';
+  monthlyFee?: number;
 }
 

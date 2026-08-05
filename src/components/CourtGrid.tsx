@@ -72,24 +72,24 @@ export default function CourtGrid({
               <span className="text-slate-600">Livre</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="inline-block w-3 h-3 bg-blue-500 rounded"></span>
-              <span className="text-blue-800">Vôlei Areia</span>
+              <span className="inline-block w-3 h-3 bg-blue-600 rounded"></span>
+              <span className="text-blue-800 font-bold">Vôlei Areia</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="inline-block w-3 h-3 bg-indigo-500 rounded"></span>
-              <span className="text-indigo-800">Futevôlei</span>
+              <span className="inline-block w-3 h-3 bg-amber-500 rounded"></span>
+              <span className="text-amber-900 font-bold">Futevôlei</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="inline-block w-3 h-3 bg-sky-500 rounded"></span>
-              <span className="text-sky-800">Vôlei Quadra</span>
+              <span className="inline-block w-3 h-3 bg-purple-600 rounded"></span>
+              <span className="text-purple-900 font-bold">Vôlei Quadra</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="inline-block w-3 h-3 bg-emerald-500 rounded"></span>
-              <span className="text-emerald-800">Beach Tennis</span>
+              <span className="inline-block w-3 h-3 bg-emerald-600 rounded"></span>
+              <span className="text-emerald-900 font-bold">Beach Tennis</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="inline-block w-3 h-3 bg-rose-100 border border-rose-200 rounded"></span>
-              <span className="text-rose-700">Manutenção</span>
+              <span className="inline-block w-3 h-3 bg-stone-800 border border-amber-500 rounded"></span>
+              <span className="text-stone-800 font-bold">Manutenção</span>
             </div>
           </div>
         </div>
@@ -164,40 +164,72 @@ export default function CourtGrid({
                       
                       if (booking) {
                         // Color styles based on sport for visual appeal
-                        const sportStyles: Record<string, string> = {
-                          'Vôlei de Areia': 'bg-blue-500 hover:bg-blue-600 text-white',
-                          'Futevôlei': 'bg-indigo-500 hover:bg-indigo-600 text-white',
-                          'Vôlei de Quadra': 'bg-sky-500 hover:bg-sky-600 text-white',
-                          'Beach Tennis': 'bg-emerald-500 hover:bg-emerald-600 text-white',
+                        const sportStyles: Record<string, { card: string; badge: string }> = {
+                          'Vôlei de Areia': {
+                            card: 'bg-blue-600 hover:bg-blue-700 text-white border border-blue-700',
+                            badge: 'bg-blue-950/60 text-blue-100 border border-blue-400/30'
+                          },
+                          'Futevôlei': {
+                            card: 'bg-amber-500 hover:bg-amber-600 text-slate-950 border border-amber-600',
+                            badge: 'bg-slate-950 text-amber-300'
+                          },
+                          'Vôlei de Quadra': {
+                            card: 'bg-purple-600 hover:bg-purple-700 text-white border border-purple-700',
+                            badge: 'bg-purple-950/60 text-purple-100 border border-purple-400/30'
+                          },
+                          'Beach Tennis': {
+                            card: 'bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-700',
+                            badge: 'bg-emerald-950/60 text-emerald-100 border border-emerald-400/30'
+                          },
                         };
 
-                        const activeStyle = sportStyles[booking.sport] || 'bg-slate-700 hover:bg-slate-800 text-white';
+                        const isMaintenance = booking.bookingType === 'Manutenção';
+                        const activeStyle = isMaintenance ? {
+                          card: 'bg-stone-800 hover:bg-stone-900 text-amber-300 border border-amber-500/40 border-dashed',
+                          badge: 'bg-amber-500 text-stone-950 font-black'
+                        } : (sportStyles[booking.sport] || {
+                          card: 'bg-slate-700 hover:bg-slate-800 text-white border border-slate-600',
+                          badge: 'bg-slate-950 text-slate-200'
+                        });
 
                         return (
                           <div 
                             key={time}
                             id={`slot-${court.id}-${time}`}
                             onClick={() => onViewBooking(booking)}
-                            className={`p-2.5 rounded-xl cursor-pointer transition text-left flex flex-col justify-between h-14 ${activeStyle} relative group shadow-sm`}
+                            title={`Agendamento: ${booking.startTime} às ${booking.endTime}`}
+                            className={`p-2.5 rounded-xl cursor-pointer transition text-left flex flex-col justify-between h-14 ${activeStyle.card} relative group shadow-sm`}
                           >
-                            <div className="flex justify-between items-center">
-                              <span className="text-xs font-bold font-mono">{time}</span>
-                              <span className="text-[8px] font-black uppercase tracking-widest bg-white/20 px-1 rounded">
-                                {booking.sport.split(' ')[0]}
+                            <div className="flex justify-between items-center gap-1">
+                              <span className="text-xs font-bold font-mono tracking-tight" title={`Horário total: ${booking.startTime} às ${booking.endTime}`}>
+                                {time}
+                              </span>
+                              <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${activeStyle.badge} truncate max-w-[95px]`}>
+                                {isMaintenance ? 'MANUTENÇÃO' : booking.sport}
                               </span>
                             </div>
                             <div className="mt-1 truncate">
-                              <span className="text-[10px] font-semibold tracking-tight block truncate">
+                              <span className="text-[11px] font-bold tracking-tight block truncate">
                                 {booking.customerName}
                               </span>
                             </div>
                             
                             {/* Hover Details Tooltip */}
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-slate-900 text-white text-[11px] p-2 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition duration-200 z-10 shadow-lg border border-slate-700">
-                              <div className="font-bold flex items-center gap-1"><User className="h-3 w-3" /> {booking.customerName}</div>
-                              <div className="mt-1 font-mono text-[10px]"><Phone className="h-3 w-3 inline mr-1" /> {booking.customerPhone}</div>
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 bg-slate-900 text-white text-[11px] p-2.5 rounded-xl opacity-0 pointer-events-none group-hover:opacity-100 transition duration-200 z-20 shadow-xl border border-slate-700">
+                              <div className="font-bold flex items-center gap-1 text-slate-100"><User className="h-3.5 w-3.5 text-blue-400" /> {booking.customerName}</div>
+                              <div className="mt-1 font-mono text-[10px] text-slate-300"><Phone className="h-3 w-3 inline mr-1 text-slate-400" /> {booking.customerPhone}</div>
                               <div className="mt-1 font-semibold text-blue-300">🏐 {booking.sport}</div>
-                              <div className="mt-1 text-slate-300">{booking.startTime} - {booking.endTime} ({formatCurrency(booking.totalValue)})</div>
+                              {booking.bookingType && (
+                                <div className="mt-0.5 font-semibold text-amber-300">📌 {booking.bookingType}</div>
+                              )}
+                              <div className="mt-1.5 pt-1.5 border-t border-slate-800 text-emerald-400 font-bold flex items-center justify-between">
+                                <span>🕒 Horário Total:</span>
+                                <span className="font-mono">{booking.startTime} às {booking.endTime}</span>
+                              </div>
+                              <div className="mt-0.5 text-slate-300 text-[10px] flex justify-between">
+                                <span>Valor:</span>
+                                <span className="font-bold">{formatCurrency(booking.totalValue)}</span>
+                              </div>
                             </div>
                           </div>
                         );
