@@ -69,15 +69,15 @@ export async function dbSaveUser(user: User): Promise<User | null> {
     telefone: user.phone || null,
   };
 
-  if (isValidUuid(user.id)) {
+  const isUuid = isValidUuid(user.id);
+  if (isUuid) {
     dbUser.id = user.id;
   }
 
-  const { data, error } = await supabase
-    .from('usuarios')
-    .upsert(dbUser, { onConflict: 'login' })
-    .select()
-    .single();
+  const query = supabase.from('usuarios');
+  const { data, error } = isUuid
+    ? await query.upsert(dbUser).select().single()
+    : await query.upsert(dbUser, { onConflict: 'login' }).select().single();
 
   if (error) {
     console.error('Erro ao salvar usuário no Supabase:', error);
@@ -489,15 +489,15 @@ export async function dbSaveSport(sport: Sport): Promise<Sport | null> {
     ativo: sport.active ?? true,
   };
 
-  if (isValidUuid(sport.id)) {
+  const isUuid = isValidUuid(sport.id);
+  if (isUuid) {
     dbSport.id = sport.id;
   }
 
-  const { data, error } = await supabase
-    .from('esportes')
-    .upsert(dbSport, { onConflict: 'nome' })
-    .select()
-    .single();
+  const query = supabase.from('esportes');
+  const { data, error } = isUuid
+    ? await query.upsert(dbSport).select().single()
+    : await query.upsert(dbSport, { onConflict: 'nome' }).select().single();
 
   if (error) {
     console.error('Erro ao salvar esporte no Supabase:', error);
@@ -563,15 +563,15 @@ export async function dbSaveCourtType(courtType: CourtTypeItem): Promise<CourtTy
     ativo: courtType.active ?? true,
   };
 
-  if (isValidUuid(courtType.id)) {
+  const isUuid = isValidUuid(courtType.id);
+  if (isUuid) {
     dbType.id = courtType.id;
   }
 
-  const { data, error } = await supabase
-    .from('tipos_quadra')
-    .upsert(dbType, { onConflict: 'nome' })
-    .select()
-    .single();
+  const query = supabase.from('tipos_quadra');
+  const { data, error } = isUuid
+    ? await query.upsert(dbType).select().single()
+    : await query.upsert(dbType, { onConflict: 'nome' }).select().single();
 
   if (error) {
     console.error('Erro ao salvar tipo de quadra no Supabase:', error);
