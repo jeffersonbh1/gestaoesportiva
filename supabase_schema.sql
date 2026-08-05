@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS agendamentos (
     horario_inicio TIME NOT NULL,
     horario_fim TIME NOT NULL,
     esporte VARCHAR(40) NOT NULL CHECK (esporte IN ('Vôlei de Areia', 'Futevôlei', 'Vôlei de Quadra', 'Beach Tennis')),
+    tipo_agendamento VARCHAR(50) DEFAULT 'Aluguel',
     valor_total NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
     status_pagamento VARCHAR(20) NOT NULL DEFAULT 'Pendente' CHECK (status_pagamento IN ('Pago', 'Pendente', 'Reembolsado')),
     metodo_pagamento VARCHAR(30) NOT NULL CHECK (metodo_pagamento IN ('Pix', 'Cartão de Crédito', 'Cartão de Débito', 'Dinheiro')),
@@ -64,6 +65,16 @@ CREATE TABLE IF NOT EXISTS agendamentos (
     -- Restrição simples para evitar agendamentos sobrepostos na mesma quadra, no mesmo dia e horário
     CONSTRAINT sem_conflito_horario UNIQUE (quadra_id, data, horario_inicio)
 );
+
+-- Garantir coluna tipo_agendamento se a tabela já existir
+ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS tipo_agendamento VARCHAR(50) DEFAULT 'Aluguel';
+
+-- Desabilitar RLS (Row Level Security) para permitir leitura e gravação com a chave pública/anon
+ALTER TABLE usuarios DISABLE ROW LEVEL SECURITY;
+ALTER TABLE quadras DISABLE ROW LEVEL SECURITY;
+ALTER TABLE agendamentos DISABLE ROW LEVEL SECURITY;
+ALTER TABLE jogadores_racha DISABLE ROW LEVEL SECURITY;
+ALTER TABLE avaliacoes_jogadores DISABLE ROW LEVEL SECURITY;
 
 CREATE INDEX IF NOT EXISTS idx_agendamentos_data ON agendamentos(data);
 CREATE INDEX IF NOT EXISTS idx_agendamentos_quadra ON agendamentos(quadra_id);

@@ -121,6 +121,7 @@ export default function App() {
       if (!isSupabaseConfigured) return;
       try {
         setDbLoading(true);
+        setDbError(null);
         const [dbUsers, dbCourts, dbBookings] = await Promise.all([
           dbGetUsers(),
           dbGetCourts(),
@@ -133,12 +134,11 @@ export default function App() {
         if (dbCourts.length > 0) {
           setCourts(dbCourts);
         }
-        if (dbBookings.length > 0) {
-          setBookings(dbBookings);
-        }
-      } catch (err) {
+        // Atualiza a lista de agendamentos com o que veio do banco
+        setBookings(dbBookings);
+      } catch (err: any) {
         console.error("Erro ao carregar dados do Supabase:", err);
-        setDbError("Erro ao carregar dados do Supabase. Usando armazenamento local.");
+        setDbError(`Erro ao carregar do Supabase: ${err.message || 'Verifique se executou o script SQL'}`);
       } finally {
         setDbLoading(false);
       }
@@ -194,8 +194,10 @@ export default function App() {
         await dbSaveUser(user);
         const updated = await dbGetUsers();
         if (updated.length > 0) setUsers(updated);
-      } catch (err) {
-        console.error(err);
+        setDbError(null);
+      } catch (err: any) {
+        console.error("Erro ao salvar usuário no Supabase:", err);
+        setDbError(`Erro ao salvar usuário no Supabase: ${err.message || 'Erro desconhecido'}`);
       }
     }
   };
@@ -206,14 +208,17 @@ export default function App() {
     if (isSupabaseConfigured) {
       try {
         await dbDeleteUser(userId);
-      } catch (err) {
-        console.error(err);
+        setDbError(null);
+      } catch (err: any) {
+        console.error("Erro ao excluir usuário no Supabase:", err);
+        setDbError(`Erro ao excluir usuário no Supabase: ${err.message || 'Erro desconhecido'}`);
       }
     }
   };
 
   // Handlers for booking actions
   const handleSaveBooking = async (booking: Booking) => {
+    // Atualização otimista no React State
     setBookings((prev) => {
       const exists = prev.some((b) => b.id === booking.id);
       if (exists) {
@@ -226,9 +231,11 @@ export default function App() {
       try {
         await dbSaveBooking(booking);
         const updated = await dbGetBookings();
-        if (updated.length > 0) setBookings(updated);
-      } catch (err) {
-        console.error(err);
+        setBookings(updated);
+        setDbError(null);
+      } catch (err: any) {
+        console.error("Erro ao salvar agendamento no Supabase:", err);
+        setDbError(`Erro ao gravar agendamento no Supabase: ${err.message || 'Verifique os logs'}`);
       }
     }
   };
@@ -239,8 +246,12 @@ export default function App() {
     if (isSupabaseConfigured) {
       try {
         await dbDeleteBooking(bookingId);
-      } catch (err) {
-        console.error(err);
+        const updated = await dbGetBookings();
+        setBookings(updated);
+        setDbError(null);
+      } catch (err: any) {
+        console.error("Erro ao deletar agendamento no Supabase:", err);
+        setDbError(`Erro ao deletar agendamento no Supabase: ${err.message || 'Erro desconhecido'}`);
       }
     }
   };
@@ -256,10 +267,12 @@ export default function App() {
         if (found) {
           await dbSaveBooking({ ...found, paymentStatus: status });
           const updated = await dbGetBookings();
-          if (updated.length > 0) setBookings(updated);
+          setBookings(updated);
+          setDbError(null);
         }
-      } catch (err) {
-        console.error(err);
+      } catch (err: any) {
+        console.error("Erro ao atualizar status de pagamento no Supabase:", err);
+        setDbError(`Erro ao atualizar pagamento no Supabase: ${err.message || 'Erro desconhecido'}`);
       }
     }
   };
@@ -567,6 +580,22 @@ export default function App() {
 
       {/* Main Content Workspace Area */}
       <main className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full overflow-y-auto">
+        {/* Banner de aviso de conexão/erro do Supabase */}
+        {dbError && (
+          <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center justify-between gap-3 shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="font-bold shrink-0">⚠️ Supabase:</span>
+              <span>{dbError}</span>
+            </div>
+            <button
+              onClick={() => setDbError(null)}
+              className="text-amber-600 hover:text-amber-900 font-bold px-2 py-1 rounded"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         <AnimatePresence mode="wait">
           {activeTab === 'dashboard' && (
             <motion.div

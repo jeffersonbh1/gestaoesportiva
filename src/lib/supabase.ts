@@ -6,24 +6,29 @@ const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
 
-// Lazy initialization client
+// Cliente do Supabase com inicialização segura
 export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
-// Helper to check for valid PostgreSQL UUID
+// Mapeamento auxiliar entre IDs mock legados e UUIDs reais do banco
+const MOCK_COURT_MAP: Record<string, string> = {
+  'court-1': '00000000-0000-0000-0000-000000000001',
+  'court-2': '00000000-0000-0000-0000-000000000002',
+  'court-3': '00000000-0000-0000-0000-000000000003',
+  'court-4': '00000000-0000-0000-0000-000000000004',
+};
+
+// Verifica se uma string é um UUID válido do PostgreSQL
 export function isValidUuid(id?: string): boolean {
   if (!id) return false;
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 }
 
 // ====================================================================
-// USUÁRIOS (usuarios)
+// USUÁRIOS (tabela: usuarios)
 // ====================================================================
 
-/**
- * Obtém todos os usuários cadastrados no Supabase
- */
 export async function dbGetUsers(): Promise<User[]> {
   if (!supabase) return [];
   const { data, error } = await supabase
@@ -32,7 +37,7 @@ export async function dbGetUsers(): Promise<User[]> {
     .order('nome', { ascending: true });
 
   if (error) {
-    console.error('Erro ao obter usuários do Supabase:', error);
+    console.error('Erro ao buscar usuários do Supabase:', error);
     throw error;
   }
 
@@ -41,28 +46,29 @@ export async function dbGetUsers(): Promise<User[]> {
     username: u.login,
     password: u.senha,
     name: u.nome,
-    role: u.perfil,
+    role: u.perfil === 'Administrador' ? 'Administrador' : 'Usuário',
     email: u.email || undefined,
     phone: u.telefone || undefined,
   }));
 }
 
-/**
- * Insere ou atualiza (UPSERT) um usuário na tabela 'usuarios'
- */
 export async function dbSaveUser(user: User): Promise<User | null> {
   if (!supabase) return null;
+
+  let perfil = user.role;
+  if (perfil === ('Admin' as any)) perfil = 'Administrador';
+  if (perfil === ('User' as any)) perfil = 'Usuário';
+  if (perfil !== 'Administrador' && perfil !== 'Usuário') perfil = 'Usuário';
 
   const dbUser: any = {
     login: user.username,
     senha: user.password || 'senha123',
     nome: user.name,
-    perfil: user.role,
+    perfil: perfil,
     email: user.email || null,
     telefone: user.phone || null,
   };
 
-  // Inclui o ID UUID apenas se for válido; caso contrário o Supabase gera o UUID
   if (isValidUuid(user.id)) {
     dbUser.id = user.id;
   }
@@ -74,7 +80,7 @@ export async function dbSaveUser(user: User): Promise<User | null> {
     .single();
 
   if (error) {
-    console.error('Erro ao salvar/atualizar usuário no Supabase:', error);
+    console.error('Erro ao salvar usuário no Supabase:', error);
     throw error;
   }
 
@@ -93,9 +99,6 @@ export async function dbSaveUser(user: User): Promise<User | null> {
   return null;
 }
 
-/**
- * Deleta um usuário do Supabase pelo ID ou login
- */
 export async function dbDeleteUser(userId: string): Promise<void> {
   if (!supabase) return;
 
@@ -111,12 +114,9 @@ export async function dbDeleteUser(userId: string): Promise<void> {
 }
 
 // ====================================================================
-// QUADRAS (quadras)
+// QUADRAS (tabela: quadras)
 // ====================================================================
 
-/**
- * Obtém todas as quadras cadastradas no Supabase
- */
 export async function dbGetCourts(): Promise<Court[]> {
   if (!supabase) return [];
   const { data, error } = await supabase
@@ -125,7 +125,7 @@ export async function dbGetCourts(): Promise<Court[]> {
     .order('nome', { ascending: true });
 
   if (error) {
-    console.error('Erro ao obter quadras do Supabase:', error);
+    console.error('Erro ao buscar quadras do Supabase:', error);
     throw error;
   }
 
@@ -139,22 +139,24 @@ export async function dbGetCourts(): Promise<Court[]> {
   }));
 }
 
-/**
- * Insere ou atualiza (UPSERT) uma quadra no Supabase
- */
 export async function dbSaveCourt(court: Court): Promise<Court | null> {
   if (!supabase) return null;
 
+  const validTypes = ['Areia', 'Poliesportiva', 'Saibro', 'Coberta'];
+  const validStatuses = ['Disponível', 'Ocupada', 'Manutenção'];
+
+  const targetId = MOCK_COURT_MAP[court.id] || court.id;
+
   const dbCourt: any = {
     nome: court.name,
-    tipo: court.type,
-    status: court.status,
-    preco_por_hora: court.pricePerHour,
+    tipo: validTypes.includes(court.type) ? court.type : 'Areia',
+    status: validStatuses.includes(court.status) ? court.status : 'Disponível',
+    preco_por_hora: Number(court.pricePerHour) || 0,
     descricao: court.description || null,
   };
 
-  if (isValidUuid(court.id)) {
-    dbCourt.id = court.id;
+  if (isValidUuid(targetId)) {
+    dbCourt.id = targetId;
   }
 
   const { data, error } = await supabase
@@ -164,7 +166,7 @@ export async function dbSaveCourt(court: Court): Promise<Court | null> {
     .single();
 
   if (error) {
-    console.error('Erro ao salvar/atualizar quadra no Supabase:', error);
+    console.error('Erro ao salvar quadra no Supabase:', error);
     throw error;
   }
 
@@ -182,34 +184,28 @@ export async function dbSaveCourt(court: Court): Promise<Court | null> {
   return null;
 }
 
-/**
- * Deleta uma quadra no Supabase
- */
 export async function dbDeleteCourt(courtId: string): Promise<void> {
   if (!supabase) return;
 
+  const targetId = MOCK_COURT_MAP[courtId] || courtId;
   const query = supabase.from('quadras').delete();
-  const { error } = isValidUuid(courtId)
-    ? await query.eq('id', courtId)
+  const { error } = isValidUuid(targetId)
+    ? await query.eq('id', targetId)
     : await query.eq('nome', courtId);
 
   if (error) {
-    console.error('Erro ao deletar quadra no Supabase:', error);
+    console.error('Erro ao deletar quadra do Supabase:', error);
     throw error;
   }
 }
 
 // ====================================================================
-// AGENDAMENTOS E RACHAS (agendamentos & jogadores_racha)
+// AGENDAMENTOS E RACHAS (tabelas: agendamentos & jogadores_racha)
 // ====================================================================
 
-/**
- * Obtém todos os agendamentos e respectivos jogadores de racha do Supabase
- */
 export async function dbGetBookings(): Promise<Booking[]> {
   if (!supabase) return [];
 
-  // Buscar agendamentos
   const { data: bData, error: bError } = await supabase
     .from('agendamentos')
     .select('*')
@@ -230,7 +226,6 @@ export async function dbGetBookings(): Promise<Booking[]> {
 
   if (pError) {
     console.error('Erro ao obter jogadores de racha do Supabase:', pError);
-    throw pError;
   }
 
   const playersMap: Record<string, Player[]> = {};
@@ -251,6 +246,17 @@ export async function dbGetBookings(): Promise<Booking[]> {
   return bData.map((b) => {
     const formatTime = (t: string) => (t ? t.slice(0, 5) : '00:00');
 
+    // Extrair bookingType das observações se gravado no formato [Tipo: ...]
+    let bookingType = 'Aluguel';
+    let notes = b.observacoes || undefined;
+    if (notes && notes.startsWith('[Tipo: ')) {
+      const closingIdx = notes.indexOf(']');
+      if (closingIdx > 7) {
+        bookingType = notes.substring(7, closingIdx);
+        notes = notes.substring(closingIdx + 1).trim() || undefined;
+      }
+    }
+
     return {
       id: b.id,
       courtId: b.quadra_id,
@@ -260,29 +266,26 @@ export async function dbGetBookings(): Promise<Booking[]> {
       startTime: formatTime(b.horario_inicio),
       endTime: formatTime(b.horario_fim),
       sport: b.esporte,
-      bookingType: b.tipo_agendamento || 'Aluguel',
+      bookingType: bookingType,
       totalValue: Number(b.valor_total),
       paymentStatus: b.status_pagamento,
       paymentMethod: b.metodo_pagamento,
-      notes: b.observacoes || undefined,
+      notes: notes,
       createdAt: b.criado_em,
       players: playersMap[b.id] || [],
     };
   });
 }
 
-/**
- * Insere ou atualiza (UPSERT) um agendamento e sincroniza os jogadores de racha
- */
 export async function dbSaveBooking(booking: Booking): Promise<Booking | null> {
   if (!supabase) return null;
 
-  // Garantir que quadra_id seja um UUID válido no banco de dados
-  let targetCourtId = booking.courtId;
+  // 1. Resolve quadra_id para um UUID válido no banco de dados
+  let targetCourtId = MOCK_COURT_MAP[booking.courtId] || booking.courtId;
+
   if (!isValidUuid(targetCourtId)) {
     const { data: quadras } = await supabase.from('quadras').select('id, nome');
     if (quadras && quadras.length > 0) {
-      // Tentar associar por nome ou pegar a primeira quadra disponível
       const matched = quadras.find((q) => q.nome.toLowerCase().includes(booking.courtId.toLowerCase()));
       targetCourtId = matched ? matched.id : quadras[0].id;
     } else {
@@ -291,29 +294,47 @@ export async function dbSaveBooking(booking: Booking): Promise<Booking | null> {
     }
   }
 
+  // 2. Valida os campos com a restrição CHECK da tabela agendamentos
+  const validSports = ['Vôlei de Areia', 'Futevôlei', 'Vôlei de Quadra', 'Beach Tennis'];
+  const validPaymentStatuses = ['Pago', 'Pendente', 'Reembolsado'];
+  const validPaymentMethods = ['Pix', 'Cartão de Crédito', 'Cartão de Débito', 'Dinheiro'];
+
+  const esporte = validSports.includes(booking.sport) ? booking.sport : 'Vôlei de Areia';
+  const status_pagamento = validPaymentStatuses.includes(booking.paymentStatus) ? booking.paymentStatus : 'Pendente';
+  const metodo_pagamento = validPaymentMethods.includes(booking.paymentMethod) ? booking.paymentMethod : 'Pix';
+
+  // 3. Inclui o tipo de agendamento nas observações para compatibilidade total com o schema
+  let observacoes = booking.notes || '';
+  if (booking.bookingType && booking.bookingType !== 'Aluguel') {
+    if (!observacoes.includes(`[Tipo: ${booking.bookingType}]`)) {
+      observacoes = `[Tipo: ${booking.bookingType}] ${observacoes}`.trim();
+    }
+  }
+
+  // 4. Constrói o objeto dbBooking estritamente com as colunas da tabela agendamentos
   const dbBooking: any = {
     quadra_id: targetCourtId,
-    nome_cliente: booking.customerName,
-    telefone_cliente: booking.customerPhone,
+    nome_cliente: booking.customerName || 'Cliente',
+    telefone_cliente: booking.customerPhone || '-',
     data: booking.date,
-    horario_inicio: booking.startTime,
-    horario_fim: booking.endTime,
-    esporte: booking.sport,
-    tipo_agendamento: booking.bookingType || 'Aluguel',
-    valor_total: booking.totalValue,
-    status_pagamento: booking.paymentStatus,
-    metodo_pagamento: booking.paymentMethod,
-    observacoes: booking.notes || null,
+    horario_inicio: booking.startTime.length === 5 ? `${booking.startTime}:00` : booking.startTime,
+    horario_fim: booking.endTime.length === 5 ? `${booking.endTime}:00` : booking.endTime,
+    esporte: esporte,
+    valor_total: Number(booking.totalValue) || 0,
+    status_pagamento: status_pagamento,
+    metodo_pagamento: metodo_pagamento,
+    observacoes: observacoes || null,
   };
 
+  // Se o ID for um UUID válido do banco, inclui para atualização (UPDATE)
   if (isValidUuid(booking.id)) {
     dbBooking.id = booking.id;
   }
 
-  // Tentar upsert
+  // Executa o upsert no Supabase
   const { data, error } = await supabase
     .from('agendamentos')
-    .upsert(dbBooking, { onConflict: 'quadra_id,data,horario_inicio' })
+    .upsert(dbBooking)
     .select()
     .single();
 
@@ -324,19 +345,15 @@ export async function dbSaveBooking(booking: Booking): Promise<Booking | null> {
 
   const bookingId = data.id;
 
-  // Sincronizar jogadores de racha (jogadores_racha)
-  // 1. Limpa registros anteriores para este agendamento
-  const { error: delError } = await supabase
-    .from('jogadores_racha')
-    .delete()
-    .eq('agendamento_id', bookingId);
-
-  if (delError) {
-    console.error('Erro ao limpar jogadores anteriores de racha:', delError);
-  }
-
-  // 2. Insere os novos jogadores
+  // 5. Sincroniza os jogadores de racha (jogadores_racha)
   if (booking.players && booking.players.length > 0) {
+    // Remove jogadores antigos do agendamento
+    await supabase
+      .from('jogadores_racha')
+      .delete()
+      .eq('agendamento_id', bookingId);
+
+    // Insere os novos jogadores
     const dbPlayers = booking.players.map((p) => {
       const item: any = {
         agendamento_id: bookingId,
@@ -344,7 +361,7 @@ export async function dbSaveBooking(booking: Booking): Promise<Booking | null> {
         email: p.email || null,
         telefone: p.phone || null,
         pago: p.hasPaid,
-        valor: p.amount,
+        valor: Number(p.amount) || 0,
       };
       if (isValidUuid(p.id)) {
         item.id = p.id;
@@ -357,7 +374,7 @@ export async function dbSaveBooking(booking: Booking): Promise<Booking | null> {
       .insert(dbPlayers);
 
     if (insError) {
-      console.error('Erro ao inserir jogadores de racha:', insError);
+      console.error('Erro ao salvar jogadores de racha no Supabase:', insError);
     }
   }
 
@@ -368,9 +385,6 @@ export async function dbSaveBooking(booking: Booking): Promise<Booking | null> {
   };
 }
 
-/**
- * Deleta um agendamento do Supabase e remove automaticamente os jogadores vinculados (CASCADE)
- */
 export async function dbDeleteBooking(bookingId: string): Promise<void> {
   if (!supabase) return;
 
@@ -386,12 +400,9 @@ export async function dbDeleteBooking(bookingId: string): Promise<void> {
 }
 
 // ====================================================================
-// AVALIAÇÕES DE JOGADORES (avaliacoes_jogadores)
+// AVALIAÇÕES DE JOGADORES (tabela: avaliacoes_jogadores)
 // ====================================================================
 
-/**
- * Obtém avaliações de jogadores salvas no Supabase
- */
 export async function dbGetRatings(bookingId?: string): Promise<PlayerRating[]> {
   if (!supabase) return [];
 
@@ -416,9 +427,6 @@ export async function dbGetRatings(bookingId?: string): Promise<PlayerRating[]> 
   }));
 }
 
-/**
- * Insere ou atualiza uma avaliação de jogador no Supabase
- */
 export async function dbSaveRating(rating: PlayerRating): Promise<void> {
   if (!supabase) return;
 
