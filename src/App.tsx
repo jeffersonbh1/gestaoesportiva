@@ -37,6 +37,10 @@ import PlayerSplitManager from './components/PlayerSplitManager';
 import PlayerRatingManager from './components/PlayerRatingManager';
 import Login from './components/Login';
 import UserManager from './components/UserManager';
+import AwardQuestionsManager, { INITIAL_AWARD_QUESTIONS } from './components/AwardQuestionsManager';
+import EvaluationModule from './components/EvaluationModule';
+import PublicEvaluationView from './components/PublicEvaluationView';
+import { AwardQuestion } from './types';
 import { 
   Calendar, 
   LayoutDashboard, 
@@ -50,7 +54,9 @@ import {
   Volleyball,
   LogOut,
   Shield,
-  Trophy
+  Trophy,
+  HelpCircle,
+  Award
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -125,6 +131,22 @@ export default function App() {
     const saved = localStorage.getItem('arena_court_types');
     return saved ? JSON.parse(saved) : INITIAL_COURT_TYPES;
   });
+
+  const [awardQuestions, setAwardQuestions] = useState<AwardQuestion[]>(() => {
+    const saved = localStorage.getItem('arena_award_questions');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (_) {}
+    }
+    return INITIAL_AWARD_QUESTIONS;
+  });
+
+  const handleSaveQuestions = (updated: AwardQuestion[]) => {
+    setAwardQuestions(updated);
+    localStorage.setItem('arena_award_questions', JSON.stringify(updated));
+  };
 
   // Data atual carregada por padrão ao entrar no sistema
   const getTodayDate = () => {
@@ -572,6 +594,50 @@ export default function App() {
     setActiveTab(tab);
   };
 
+  // Public evaluation URL handler (?eval=xyz or ?votar=xyz)
+  const [publicEvalBookingId, setPublicEvalBookingId] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('eval') || params.get('votar') || params.get('evaluacao') || null;
+  });
+
+  const clearPublicEval = () => {
+    setPublicEvalBookingId(null);
+    window.history.replaceState({}, '', window.location.pathname);
+  };
+
+  if (publicEvalBookingId) {
+    const targetBooking = bookings.find(b => b.id === publicEvalBookingId);
+    if (targetBooking) {
+      const courtName = courts.find(c => c.id === targetBooking.courtId)?.name || 'Quadra da Arena';
+      return (
+        <PublicEvaluationView
+          booking={targetBooking}
+          courtName={courtName}
+          onClosePublicView={clearPublicEval}
+        />
+      );
+    } else {
+      // Fallback if booking ID not found in current state (e.g. invalid link or missing)
+      return (
+        <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6 text-center space-y-4">
+          <div className="p-4 bg-amber-500/20 text-amber-400 rounded-3xl border border-amber-500/30">
+            <Trophy className="h-10 w-10 mx-auto" />
+          </div>
+          <h1 className="text-2xl font-black">Partida não Encontrada</h1>
+          <p className="text-xs text-slate-400 max-w-sm">
+            O código da partida fornecido no link não corresponde a nenhum agendamento ativo. Verifique se o link está correto.
+          </p>
+          <button
+            onClick={clearPublicEval}
+            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl text-xs font-bold transition cursor-pointer"
+          >
+            Acessar o Sistema
+          </button>
+        </div>
+      );
+    }
+  }
+
   if (!currentUser) {
     return <Login onLogin={setCurrentUser} users={users} />;
   }
@@ -718,6 +784,21 @@ export default function App() {
               >
                 <Shield className="h-4.5 w-4.5" />
                 Controle de Usuários
+              </button>
+            )}
+
+            {currentUser.role === 'Administrador' && (
+              <button
+                id="nav-avaliacao"
+                onClick={() => { setActiveTab('perguntas'); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                  activeTab === 'perguntas' || activeTab === 'avaliacao'
+                    ? 'bg-blue-50 text-blue-600 font-bold' 
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+                }`}
+              >
+                <Award className="h-4.5 w-4.5" />
+                Avaliação
               </button>
             )}
           </nav>
@@ -935,6 +1016,22 @@ export default function App() {
                 currentUser={currentUser}
                 onSaveUser={handleSaveUser}
                 onDeleteUser={handleDeleteUser}
+              />
+            </motion.div>
+          )}
+
+          {(activeTab === 'perguntas' || activeTab === 'avaliacao') && currentUser.role === 'Administrador' && (
+            <motion.div
+              key="avaliacao"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.2 }}
+            >
+              <EvaluationModule 
+                questions={awardQuestions}
+                onSaveQuestions={handleSaveQuestions}
+                sportsList={['Todos', ...sports.map(s => s.name)]}
               />
             </motion.div>
           )}

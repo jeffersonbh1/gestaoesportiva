@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Court, Booking, BookingStudent, Player, SportType, BookingType, PaymentStatus, PaymentMethod, RentalType, Sport, Teacher, Student } from '../types';
+import { Court, Booking, BookingStudent, Player, SportType, BookingType, PaymentStatus, PaymentMethod, RentalType, Sport, Teacher, Student, Team } from '../types';
 import { INITIAL_RENTAL_TYPES, INITIAL_SPORTS, INITIAL_TEACHERS, INITIAL_STUDENTS } from '../data/mockData';
 import { TIME_SLOTS, formatCurrency, getBookingOverlap, formatPhoneNumber, timeToMinutes } from '../utils';
 import { 
@@ -19,7 +19,11 @@ import {
   Wrench,
   GraduationCap,
   UserCheck,
-  Plus
+  Plus,
+  Users,
+  Shield,
+  Share2,
+  ExternalLink
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -32,6 +36,7 @@ interface BookingModalProps {
   sports?: Sport[];
   teachers?: Teacher[];
   students?: Student[];
+  teams?: Team[];
   selectedDate: string;
   presetCourtId?: string;
   presetStartTime?: string;
@@ -50,6 +55,7 @@ export default function BookingModal({
   sports = [],
   teachers = [],
   students = [],
+  teams: externalTeams,
   selectedDate,
   presetCourtId,
   presetStartTime,
@@ -164,6 +170,52 @@ export default function BookingModal({
 
   // Safe delete state instead of native confirm()
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+
+  // Teams list
+  const [allTeams, setAllTeams] = useState<Team[]>(externalTeams || []);
+  const [selectedTeamId, setSelectedTeamId] = useState<string>('');
+
+  useEffect(() => {
+    if (externalTeams && externalTeams.length > 0) {
+      setAllTeams(externalTeams);
+    } else {
+      const saved = localStorage.getItem('arena_teams_data');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) setAllTeams(parsed);
+        } catch (_) {}
+      }
+    }
+  }, [externalTeams, isOpen]);
+
+  const handleSelectTeam = (teamIdVal: string) => {
+    setSelectedTeamId(teamIdVal);
+    if (!teamIdVal) return;
+
+    const team = allTeams.find(t => t.id === teamIdVal);
+    if (team) {
+      setCustomerName(team.name);
+      if (team.sport) {
+        setSport(team.sport as SportType);
+      }
+      if (team.members && team.members.length > 0) {
+        const teamPlayers: Player[] = team.members.map((m, idx) => ({
+          id: `pl-team-${Date.now()}-${idx}`,
+          name: m.name,
+          email: m.email,
+          phone: m.phone,
+          hasPaid: false,
+          amount: 0
+        }));
+        setPlayers(teamPlayers);
+        if (team.members[0]?.phone) {
+          setCustomerPhone(team.members[0].phone);
+        }
+      }
+    }
+  };
 
   // Initialize fields on mount or change
   useEffect(() => {
@@ -426,12 +478,34 @@ export default function BookingModal({
                 {bookingType === 'Manutenção' ? '✔ Horário em Manutenção' : 'Marcar como Manutenção'}
               </button>
             </div>
+
+            {/* Quick Team Link Selector */}
+            {bookingType !== 'Manutenção' && allTeams.length > 0 && (
+              <div className="p-2.5 bg-blue-50/80 border border-blue-200/80 rounded-xl flex items-center gap-2">
+                <Users className="h-4 w-4 text-blue-600 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <select
+                    value={selectedTeamId}
+                    onChange={(e) => handleSelectTeam(e.target.value)}
+                    className="w-full bg-white border border-blue-200 rounded-lg px-2.5 py-1 text-xs font-bold text-blue-900 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-2xs"
+                  >
+                    <option value="">🏆 Vincular Time / Equipe Cadastrada (Opcional)...</option>
+                    {allTeams.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        🏆 {t.name} ({t.sport} - {t.members?.length || 0} atletas)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="relative">
                 <User className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
                 <input 
                   type="text"
-                  placeholder={bookingType === 'Manutenção' ? "Motivo ou Descrição da Manutenção" : "Nome do Cliente"}
+                  placeholder={bookingType === 'Manutenção' ? "Motivo ou Descrição da Manutenção" : "Nome do Cliente / Time"}
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                   className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-semibold text-slate-800"
@@ -804,39 +878,56 @@ export default function BookingModal({
           </div>
 
           {/* Actions Footer */}
-          <div className="p-6 pt-3 border-t border-slate-100 flex justify-between items-center gap-3 shrink-0 bg-slate-50/50">
-            {editingBooking && onDeleteBooking ? (
-              <div>
-                {confirmDelete ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-rose-700">Excluir agendamento?</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onDeleteBooking(editingBooking.id);
-                        onClose();
-                      }}
-                      className="px-3 py-1.5 bg-rose-600 text-white hover:bg-rose-700 rounded-xl text-xs font-bold transition cursor-pointer shadow-xs"
-                    >
-                      Sim, Excluir
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDelete(false)}
-                      className="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
-                    >
-                      Cancelar
-                    </button>
+          <div className="p-6 pt-3 border-t border-slate-100 flex flex-wrap sm:flex-nowrap justify-between items-center gap-3 shrink-0 bg-slate-50/50">
+            {editingBooking ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const origin = window.location.origin + window.location.pathname;
+                    window.open(`${origin}?eval=${editingBooking.id}`, '_blank');
+                  }}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  title="Abrir página de avaliação pública do jogo"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  <span>Link de Avaliação</span>
+                </button>
+
+                {onDeleteBooking && (
+                  <div>
+                    {confirmDelete ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-rose-700">Excluir?</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onDeleteBooking(editingBooking.id);
+                            onClose();
+                          }}
+                          className="px-3 py-1.5 bg-rose-600 text-white hover:bg-rose-700 rounded-xl text-xs font-bold transition cursor-pointer shadow-xs"
+                        >
+                          Sim
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDelete(false)}
+                          className="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDelete(true)}
+                        className="px-3.5 py-2 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Trash2 className="h-4 w-4 text-rose-500" />
+                        <span>Excluir</span>
+                      </button>
+                    )}
                   </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmDelete(true)}
-                    className="px-4 py-2 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Trash2 className="h-4 w-4 text-rose-500" />
-                    Excluir Agendamento
-                  </button>
                 )}
               </div>
             ) : <div />}

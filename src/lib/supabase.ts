@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Court, Booking, BookingStudent, User, Player, PlayerRating, Sport, CourtTypeItem, RentalType, Teacher, Student } from '../types';
+import { Court, Booking, BookingStudent, User, Player, PlayerRating, Sport, CourtTypeItem, RentalType, Teacher, Student, Team, TeamMember, AwardQuestion } from '../types';
 import { INITIAL_TEACHERS, INITIAL_STUDENTS, INITIAL_COURT_TYPES, INITIAL_RENTAL_TYPES } from '../data/mockData';
 
 const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
@@ -1337,4 +1337,376 @@ export async function dbDeleteRentalType(id: string, name?: string): Promise<voi
     else await q2.eq('nome', name || id);
   } catch (_) {}
 }
+
+// ====================================================================
+// TIMES & MEMBROS DE TIME (tabelas: times, membros_time)
+// ====================================================================
+
+export async function dbGetTeams(): Promise<Team[]> {
+  if (!supabase) return [];
+  try {
+    const { data: tData, error: tError } = await supabase
+      .from('times')
+      .select('*')
+      .order('nome', { ascending: true });
+
+    if (tError || !tData) return [];
+
+    const { data: mData } = await supabase
+      .from('membros_time')
+      .select('*');
+
+    const membersMap: Record<string, TeamMember[]> = {};
+    (mData || []).forEach((m) => {
+      if (!membersMap[m.time_id]) {
+        membersMap[m.time_id] = [];
+      }
+      membersMap[m.time_id].push({
+        id: m.id,
+        name: m.nome,
+        email: m.email || undefined,
+        phone: m.telefone || undefined,
+        position: m.posicao || undefined,
+        notes: m.observacoes || undefined,
+      });
+    });
+
+    return tData.map((t) => ({
+      id: t.id,
+      name: t.nome,
+      sport: t.esporte || 'Beach Tennis',
+      description: t.descricao || undefined,
+      members: membersMap[t.id] || [],
+      createdAt: t.criado_em || undefined,
+    }));
+  } catch (err) {
+    console.warn('Erro ao buscar times do Supabase:', err);
+    return [];
+  }
+}
+
+export async function dbSaveTeam(team: Team): Promise<Team | null> {
+  if (!supabase) return null;
+
+  const dbTeam: any = {
+    nome: team.name,
+    esporte: team.sport || 'Beach Tennis',
+    descricao: team.description || null,
+  };
+
+  if (isValidUuid(team.id)) {
+    dbTeam.id = team.id;
+  }
+
+  const { data: savedTeam, error: tErr } = await supabase
+    .from('times')
+    .upsert(dbTeam)
+    .select()
+    .single();
+
+  if (tErr || !savedTeam) {
+    console.error('Erro ao salvar time no Supabase:', tErr);
+    throw tErr;
+  }
+
+  const teamId = savedTeam.id;
+
+  // Sincroniza membros do time
+  try {
+    await supabase.from('membros_time').delete().eq('time_id', teamId);
+
+    if (team.members && team.members.length > 0) {
+      const rows = team.members.map((m) => ({
+        time_id: teamId,
+        nome: m.name,
+        email: m.email || null,
+        telefone: m.phone || null,
+        posicao: m.position || null,
+        observacoes: m.notes || null,
+      }));
+      await supabase.from('membros_time').insert(rows);
+    }
+  } catch (mErr) {
+    console.error('Erro ao salvar membros do time:', mErr);
+  }
+
+  return {
+    ...team,
+    id: teamId,
+  };
+}
+
+export async function dbDeleteTeam(teamId: string): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    if (isValidUuid(teamId)) {
+      await supabase.from('membros_time').delete().eq('time_id', teamId);
+      await supabase.from('times').delete().eq('id', teamId);
+    }
+    return true;
+  } catch (err) {
+    console.error('Erro ao excluir time do Supabase:', err);
+    return false;
+  }
+}
+
+// ====================================================================
+// PERGUNTAS DE AVALIAÇÃO (tabela: perguntas_avaliacao)
+// ====================================================================
+
+export async function dbGetAwardQuestions(): Promise<AwardQuestion[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('perguntas_avaliacao')
+      .select('*')
+      .order('criado_em', { ascending: true });
+
+    if (error || !data) return [];
+
+    return data.map((q) => ({
+      id: q.id,
+      title: q.titulo,
+      subtitle: q.subtitulo || '',
+      iconName: q.icone || 'Crown',
+      sport: q.esporte || 'Todos',
+      active: q.ativo ?? true,
+      createdAt: q.criado_em || undefined,
+    }));
+  } catch (err) {
+    console.warn('Erro ao buscar perguntas de avaliação:', err);
+    return [];
+  }
+}
+
+export async function dbSaveAwardQuestion(q: AwardQuestion): Promise<AwardQuestion | null> {
+  if (!supabase) return null;
+
+  const dbQuestion: any = {
+    titulo: q.title,
+    subtitulo: q.subtitle || null,
+    icone: q.iconName || 'Crown',
+    esporte: q.sport || 'Todos',
+    ativo: q.active ?? true,
+  };
+
+  if (isValidUuid(q.id)) {
+    dbQuestion.id = q.id;
+  }
+
+  const { data, error } = await supabase
+    .from('perguntas_avaliacao')
+    .upsert(dbQuestion)
+    .select()
+    .single();
+
+  if (error || !data) {
+    console.error('Erro ao salvar pergunta de avaliação:', error);
+    throw error;
+  }
+
+  return {
+    id: data.id,
+    title: data.titulo,
+    subtitle: data.subtitulo || '',
+    iconName: data.icone || 'Crown',
+    sport: data.esporte || 'Todos',
+    active: data.ativo ?? true,
+    createdAt: data.criado_em || undefined,
+  };
+}
+
+export async function dbDeleteAwardQuestion(id: string): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    if (isValidUuid(id)) {
+      await supabase.from('perguntas_avaliacao').delete().eq('id', id);
+    }
+    return true;
+  } catch (err) {
+    console.error('Erro ao excluir pergunta de avaliação:', err);
+    return false;
+  }
+}
+
+// ====================================================================
+// SCRIPT SQL DDL COMPLETO DAS TABELAS DO SISTEMA
+// ====================================================================
+
+export const SQL_SCHEMA_SCRIPT = `-- ============================================================
+-- SCRIPT DE CRIAÇÃO DAS TABELAS DO BANCO DE DADOS (SUPABASE / POSTGRESQL)
+-- Arena Esportiva - Gestão de Agendamentos, Quadras, Aulas, Times e Avaliações
+-- ============================================================
+
+-- Habilita extensão pgcrypto para UUIDs automáticos
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- 1. TABELA DE QUADRAS
+CREATE TABLE IF NOT EXISTS public.quadras (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT NOT NULL,
+    tipo TEXT NOT NULL DEFAULT 'Areia',
+    status TEXT NOT NULL DEFAULT 'Disponível',
+    preco_por_hora NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+    descricao TEXT,
+    criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 2. TABELA DE USUÁRIOS
+CREATE TABLE IF NOT EXISTS public.usuarios (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    login TEXT UNIQUE NOT NULL,
+    senha TEXT NOT NULL,
+    nome TEXT NOT NULL,
+    perfil TEXT NOT NULL DEFAULT 'Usuário',
+    email TEXT,
+    telefone TEXT,
+    criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. TABELA DE ESPORTES
+CREATE TABLE IF NOT EXISTS public.esportes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT UNIQUE NOT NULL,
+    descricao TEXT,
+    ativo BOOLEAN DEFAULT TRUE,
+    criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4. TABELA DE TIPOS DE QUADRA
+CREATE TABLE IF NOT EXISTS public.tipos_quadra (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT UNIQUE NOT NULL,
+    descricao TEXT,
+    ativo BOOLEAN DEFAULT TRUE,
+    criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 5. TABELA DE TIPOS DE ALUGUEL / AGENDAMENTO
+CREATE TABLE IF NOT EXISTS public.tipos_aluguel (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT UNIQUE NOT NULL,
+    descricao TEXT,
+    is_default BOOLEAN DEFAULT FALSE,
+    criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 6. TABELA DE PROFESSORES
+CREATE TABLE IF NOT EXISTS public.professores (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT NOT NULL,
+    telefone TEXT,
+    esporte TEXT DEFAULT 'Futevôlei',
+    email TEXT,
+    preco_aula NUMERIC(10,2) DEFAULT 0.00,
+    status TEXT DEFAULT 'Ativo',
+    observacoes TEXT,
+    criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 7. TABELA DE ALUNOS
+CREATE TABLE IF NOT EXISTS public.alunos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT NOT NULL,
+    telefone TEXT,
+    esporte TEXT DEFAULT 'Futevôlei',
+    nivel TEXT DEFAULT 'Iniciante',
+    professor_id UUID REFERENCES public.professores(id) ON DELETE SET NULL,
+    status TEXT DEFAULT 'Ativo',
+    observacoes TEXT,
+    criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 8. TABELA DE AGENDAMENTOS
+CREATE TABLE IF NOT EXISTS public.agendamentos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    quadra_id UUID REFERENCES public.quadras(id) ON DELETE CASCADE,
+    nome_cliente TEXT NOT NULL,
+    telefone_cliente TEXT,
+    data DATE NOT NULL,
+    horario_inicio TIME NOT NULL,
+    horario_fim TIME NOT NULL,
+    esporte TEXT NOT NULL DEFAULT 'Vôlei de Areia',
+    valor_total NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+    status_pagamento TEXT NOT NULL DEFAULT 'Pendente',
+    metodo_pagamento TEXT NOT NULL DEFAULT 'Pix',
+    observacoes TEXT,
+    criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 9. TABELA DE AULAS (Relacionamento entre Agendamento, Professor e Aluno)
+CREATE TABLE IF NOT EXISTS public.aulas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agendamento_id UUID REFERENCES public.agendamentos(id) ON DELETE CASCADE,
+    professor_id UUID REFERENCES public.professores(id) ON DELETE SET NULL,
+    aluno_id UUID REFERENCES public.alunos(id) ON DELETE SET NULL,
+    criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 10. TABELA DE JOGADORES DO RACHA / PARTIDA
+CREATE TABLE IF NOT EXISTS public.jogadores_racha (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agendamento_id UUID REFERENCES public.agendamentos(id) ON DELETE CASCADE,
+    nome TEXT NOT NULL,
+    email TEXT,
+    telefone TEXT,
+    pago BOOLEAN DEFAULT FALSE,
+    valor NUMERIC(10,2) DEFAULT 0.00,
+    criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 11. TABELA DE TIMES (CADASTRO DE EQUIPES)
+CREATE TABLE IF NOT EXISTS public.times (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT NOT NULL,
+    esporte TEXT NOT NULL DEFAULT 'Beach Tennis',
+    descricao TEXT,
+    criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 12. TABELA DE MEMBROS DO TIME (PARTICIPANTES DO TIME)
+CREATE TABLE IF NOT EXISTS public.membros_time (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    time_id UUID REFERENCES public.times(id) ON DELETE CASCADE,
+    nome TEXT NOT NULL,
+    email TEXT,
+    telefone TEXT,
+    posicao TEXT,
+    observacoes TEXT,
+    criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 13. TABELA DE PERGUNTAS DE AVALIAÇÃO / CATEGORIAS DE PREMIAÇÃO
+CREATE TABLE IF NOT EXISTS public.perguntas_avaliacao (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    titulo TEXT NOT NULL,
+    subtitulo TEXT,
+    icone TEXT DEFAULT 'Crown',
+    esporte TEXT DEFAULT 'Todos',
+    ativo BOOLEAN DEFAULT TRUE,
+    criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 14. TABELA DE AVALIAÇÕES / VOTOS DOS JOGADORES PÓS-JOGO
+CREATE TABLE IF NOT EXISTS public.avaliacoes_jogadores (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agendamento_id UUID REFERENCES public.agendamentos(id) ON DELETE CASCADE,
+    avaliador_nome TEXT NOT NULL,
+    jogador_avaliado_nome TEXT NOT NULL,
+    nota INTEGER NOT NULL CHECK (nota >= 1 AND nota <= 5),
+    categoria_id TEXT,
+    criado_em TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unique_voto_partida UNIQUE (agendamento_id, avaliador_nome, jogador_avaliado_nome)
+);
+
+-- ============================================================
+-- ÍNDICES PARA ALTA PERFORMANCE
+-- ============================================================
+CREATE INDEX IF NOT EXISTS idx_agendamentos_data ON public.agendamentos(data);
+CREATE INDEX IF NOT EXISTS idx_agendamentos_quadra ON public.agendamentos(quadra_id);
+CREATE INDEX IF NOT EXISTS idx_jogadores_racha_agendamento ON public.jogadores_racha(agendamento_id);
+CREATE INDEX IF NOT EXISTS idx_membros_time_time ON public.membros_time(time_id);
+CREATE INDEX IF NOT EXISTS idx_avaliacoes_agendamento ON public.avaliacoes_jogadores(agendamento_id);
+`;
+
 

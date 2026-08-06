@@ -124,3 +124,31 @@ export interface Student {
   notes?: string;
 }
 
+export interface AwardQuestion {
+  id: string;
+  title: string;
+  subtitle: string;
+  iconName?: string;
+  sport?: string;
+  active: boolean;
+  createdAt?: string;
+}
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  position?: string; // ex: Atacante, Levantador, Defesa
+  notes?: string;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  sport: string;
+  description?: string;
+  members: TeamMember[];
+  createdAt?: string;
+}
+
