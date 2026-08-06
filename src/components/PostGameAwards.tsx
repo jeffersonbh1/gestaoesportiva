@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
 import { Booking, AwardQuestion } from '../types';
 import { INITIAL_AWARD_QUESTIONS, getIconComponent } from './AwardQuestionsManager';
+import { isSupabaseConfigured, dbSaveRating, dbSaveAvaliacaoJogo } from '../lib/supabase';
 import { 
   Trophy, 
   Sparkles, 
@@ -196,6 +197,33 @@ export default function PostGameAwards({ selectedBooking, onVoteSubmitted, onClo
   // Trigger celebration & completion
   const triggerCompletion = () => {
     setIsFinished(true);
+
+    // Save votes to database if Supabase is configured
+    if (isSupabaseConfigured) {
+      Object.entries(selectedPlayerPerCategory).forEach(([catId, votedPlayerId]) => {
+        const votedPlayerObj = eligibleNominees.find(p => p.id === votedPlayerId || p.name === votedPlayerId);
+        const votedPlayerName: string = votedPlayerObj ? votedPlayerObj.name : String(votedPlayerId || '');
+        
+        if (votedPlayerName) {
+          dbSaveRating({
+            bookingId: selectedBooking.id,
+            evaluatorName: voterName,
+            ratedPlayerName: votedPlayerName,
+            rating: 5,
+            createdAt: new Date().toISOString()
+          });
+
+          dbSaveAvaliacaoJogo({
+            bookingId: selectedBooking.id,
+            voterType: 'jogador',
+            evaluatorName: voterName,
+            perguntaId: catId,
+            ratedPlayerName: votedPlayerName,
+            rating: 5,
+          });
+        }
+      });
+    }
 
     // Launch Confetti
     try {

@@ -85,7 +85,7 @@ export interface DailyTimelineSlot {
 }
 
 export interface PlayerRating {
-  id: string;
+  id?: string;
   bookingId: string;
   evaluatorName: string;
   ratedPlayerName: string;
@@ -149,6 +149,30 @@ export interface Team {
   sport: string;
   description?: string;
   members: TeamMember[];
+  createdAt?: string;
+}
+
+export interface Torcedor {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  favoriteTeam?: string;
+  bookingId?: string;
+  createdAt?: string;
+}
+
+export interface AvaliacaoJogo {
+  id: string;
+  bookingId: string;
+  voterType: 'jogador' | 'torcedor';
+  jogadorId?: string;
+  torcedorId?: string;
+  evaluatorName?: string;
+  perguntaId?: string;
+  ratedPlayerName?: string;
+  rating: number;
+  notes?: string;
   createdAt?: string;
 }
 

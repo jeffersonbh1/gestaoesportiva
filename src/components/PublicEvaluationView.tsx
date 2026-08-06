@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Booking, PlayerRating } from '../types';
+import { Booking, PlayerRating, Player } from '../types';
 import PostGameAwards from './PostGameAwards';
 import { 
   Trophy, 
@@ -18,11 +18,13 @@ import {
   Check,
   Volleyball,
   Crown,
-  ChevronLeft
+  ChevronLeft,
+  UserPlus,
+  Plus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
-import { isSupabaseConfigured, dbGetRatings } from '../lib/supabase';
+import { isSupabaseConfigured, dbGetRatings, dbGetJogadores, dbSaveJogador, dbSaveTorcedor } from '../lib/supabase';
 
 interface PublicEvaluationViewProps {
   booking: Booking;
@@ -32,8 +34,7 @@ interface PublicEvaluationViewProps {
 
 export default function PublicEvaluationView({
   booking,
-  courtName = 'Quadra da Arena',
-  onClosePublicView
+  courtName = 'Quadra da Arena'
 }: PublicEvaluationViewProps) {
   // Identification step state
   const [voterType, setVoterType] = useState<'player' | 'spectator'>('player');
@@ -41,20 +42,37 @@ export default function PublicEvaluationView({
   const [customName, setCustomName] = useState<string>('');
   const [voterPhone, setVoterPhone] = useState<string>('');
 
+  // Player registration state
+  const [showAddPlayerForm, setShowAddPlayerForm] = useState<boolean>(false);
+  const [newPlayerName, setNewPlayerName] = useState<string>('');
+  const [currentPlayers, setCurrentPlayers] = useState<Player[]>(() => {
+    const localKey = `arena_booking_players_${booking.id}`;
+    const stored = localStorage.getItem(localKey);
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (_) {}
+    }
+    return booking.players || [];
+  });
+
   // Step flow: 'identify' -> 'evaluate' -> 'already_voted' -> 'completed'
   const [step, setStep] = useState<'identify' | 'evaluate' | 'already_voted' | 'completed'>('identify');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [existingRatings, setExistingRatings] = useState<PlayerRating[]>([]);
 
-  const allPlayers = booking.players || [];
-
-  // Check existing ratings on mount to prevent double voting
+  // Check existing ratings and load database players on mount
   useEffect(() => {
     async function checkExisting() {
       if (isSupabaseConfigured) {
         try {
           const dbData = await dbGetRatings(booking.id);
           setExistingRatings(dbData);
+
+          const dbPlayers = await dbGetJogadores(booking.id);
+          if (dbPlayers && dbPlayers.length > 0) {
+            setCurrentPlayers(dbPlayers);
+          }
         } catch (_) {}
       } else {
         const local = localStorage.getItem(`ratings_${booking.id}`);
@@ -68,7 +86,7 @@ export default function PublicEvaluationView({
 
   // Derived voter name
   const finalVoterName = voterType === 'player' 
-    ? (selectedPlayerName || (allPlayers[0]?.name || 'Jogador'))
+    ? (selectedPlayerName || (currentPlayers[0]?.name || 'Jogador'))
     : customName.trim();
 
   // Helper to check duplicate vote
@@ -88,16 +106,54 @@ export default function PublicEvaluationView({
     return hasDbVote;
   };
 
+  // Add new player dynamically
+  const handleAddNewPlayer = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = newPlayerName.trim();
+    if (!trimmed) return;
+
+    // Check if player already exists
+    const exists = currentPlayers.some(p => p.name.toLowerCase() === trimmed.toLowerCase());
+    if (exists) {
+      setSelectedPlayerName(trimmed);
+      setShowAddPlayerForm(false);
+      setNewPlayerName('');
+      return;
+    }
+
+    const newPlayerObj: Player = {
+      id: `p_dyn_${Date.now()}`,
+      name: trimmed,
+      hasPaid: false,
+      amount: 0
+    };
+
+    if (isSupabaseConfigured) {
+      const savedDbPlayer = await dbSaveJogador(newPlayerObj, booking.id);
+      if (savedDbPlayer) {
+        newPlayerObj.id = savedDbPlayer.id;
+      }
+    }
+
+    const updated = [...currentPlayers, newPlayerObj];
+    setCurrentPlayers(updated);
+    localStorage.setItem(`arena_booking_players_${booking.id}`, JSON.stringify(updated));
+    setSelectedPlayerName(trimmed);
+    setNewPlayerName('');
+    setShowAddPlayerForm(false);
+    setValidationError(null);
+  };
+
   // Handle identification submission
-  const handleProceedToEvaluation = (e: React.FormEvent) => {
+  const handleProceedToEvaluation = async (e: React.FormEvent) => {
     e.preventDefault();
     setValidationError(null);
 
     if (voterType === 'player' && !selectedPlayerName) {
-      if (allPlayers.length > 0) {
-        setSelectedPlayerName(allPlayers[0].name);
+      if (currentPlayers.length > 0) {
+        setSelectedPlayerName(currentPlayers[0].name);
       } else {
-        setValidationError('Por favor, digite seu nome de jogador.');
+        setValidationError('Por favor, cadastre ou selecione seu nome de jogador.');
         return;
       }
     }
@@ -111,10 +167,19 @@ export default function PublicEvaluationView({
         setValidationError('Por favor, informe seu telefone/WhatsApp para validação.');
         return;
       }
+
+      // Save torcedor to database
+      if (isSupabaseConfigured) {
+        await dbSaveTorcedor({
+          name: customName.trim(),
+          phone: voterPhone.trim(),
+          bookingId: booking.id
+        });
+      }
     }
 
     const voterNameToVerify = voterType === 'player' 
-      ? (selectedPlayerName || allPlayers[0]?.name || 'Jogador')
+      ? (selectedPlayerName || currentPlayers[0]?.name || 'Jogador')
       : customName.trim();
 
     if (checkIfAlreadyVoted(voterNameToVerify, voterPhone)) {
@@ -145,6 +210,11 @@ export default function PublicEvaluationView({
     setStep('completed');
   };
 
+  const bookingWithUpdatedPlayers: Booking = {
+    ...booking,
+    players: currentPlayers
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-between p-4 sm:p-6 font-sans">
       
@@ -157,15 +227,6 @@ export default function PublicEvaluationView({
               <Sparkles className="h-3.5 w-3.5 text-amber-500" />
               Avaliação de Partida
             </span>
-
-            {onClosePublicView && (
-              <button 
-                onClick={onClosePublicView}
-                className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3.5 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1"
-              >
-                <span>Voltar ao Sistema</span>
-              </button>
-            )}
           </div>
 
           <div>
@@ -212,7 +273,7 @@ export default function PublicEvaluationView({
                 Identificação do Votante
               </h2>
               <p className="text-xs text-slate-500 font-medium">
-                Selecione seu nome ou informe seus dados para liberar o painel de avaliação.
+                Selecione seu nome ou cadastre-se para liberar o painel de avaliação.
               </p>
             </div>
 
@@ -254,35 +315,74 @@ export default function PublicEvaluationView({
                 </button>
               </div>
 
-              {/* Player Selector */}
+              {/* Player Selector & Registration */}
               {voterType === 'player' && (
-                <div className="space-y-2">
-                  <label className="text-xs font-extrabold text-slate-700 block">
-                    Selecione seu nome na lista da partida:
-                  </label>
-                  {allPlayers.length > 0 ? (
-                    <select
-                      value={selectedPlayerName}
-                      onChange={(e) => setSelectedPlayerName(e.target.value)}
-                      className="w-full px-4 py-3.5 bg-slate-50 border border-slate-300 rounded-2xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-2xs"
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-xs font-extrabold text-slate-700 block">
+                      Selecione seu nome na partida:
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowAddPlayerForm(!showAddPlayerForm)}
+                      className="text-xs font-extrabold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-xl transition"
                     >
-                      <option value="">-- Clique para escolher seu nome --</option>
-                      {allPlayers.map((p) => (
-                        <option key={p.id} value={p.name}>
-                          👤 {p.name}
-                        </option>
-                      ))}
-                    </select>
+                      <UserPlus className="h-3.5 w-3.5" />
+                      <span>{showAddPlayerForm ? 'Ver Lista' : '+ Cadastrar Jogador'}</span>
+                    </button>
+                  </div>
+
+                  {/* Add Player Inline Form */}
+                  {showAddPlayerForm ? (
+                    <div className="p-4 bg-slate-50 border border-blue-200 rounded-2xl space-y-3">
+                      <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <Plus className="h-4 w-4 text-blue-600" />
+                        Cadastrar Novo Jogador na Partida
+                      </p>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Digite o nome do jogador"
+                          value={newPlayerName}
+                          onChange={(e) => setNewPlayerName(e.target.value)}
+                          className="flex-1 px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleAddNewPlayer()}
+                          className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shrink-0 cursor-pointer shadow-xs"
+                        >
+                          Adicionar
+                        </button>
+                      </div>
+                    </div>
                   ) : (
-                    <div>
-                      <input 
-                        type="text"
-                        placeholder="Digite seu nome completo de jogador"
+                    currentPlayers.length > 0 ? (
+                      <select
                         value={selectedPlayerName}
                         onChange={(e) => setSelectedPlayerName(e.target.value)}
-                        className="w-full px-4 py-3.5 bg-slate-50 border border-slate-300 rounded-2xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
+                        className="w-full px-4 py-3.5 bg-slate-50 border border-slate-300 rounded-2xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-2xs"
+                      >
+                        <option value="">-- Clique para escolher seu nome --</option>
+                        {currentPlayers.map((p) => (
+                          <option key={p.id} value={p.name}>
+                            👤 {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-center space-y-2">
+                        <p className="text-xs text-amber-800 font-bold">Nenhum jogador cadastrado nesta partida ainda.</p>
+                        <button
+                          type="button"
+                          onClick={() => setShowAddPlayerForm(true)}
+                          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black transition cursor-pointer"
+                        >
+                          + Cadastrar Primeiro Jogador
+                        </button>
+                      </div>
+                    )
                   )}
                 </div>
               )}
@@ -343,17 +443,8 @@ export default function PublicEvaluationView({
             animate={{ opacity: 1, scale: 1 }}
             className="space-y-4"
           >
-            <button
-              type="button"
-              onClick={() => setStep('identify')}
-              className="text-xs font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer px-2 py-1 bg-white rounded-xl border border-slate-200 shadow-2xs w-fit"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              <span>Voltar para Identificação</span>
-            </button>
-
             <PostGameAwards
-              selectedBooking={booking}
+              selectedBooking={bookingWithUpdatedPlayers}
               initialVoterName={finalVoterName}
               onVoteSubmitted={handleAwardVoteSubmitted}
             />
@@ -382,16 +473,6 @@ export default function PublicEvaluationView({
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-500 font-medium">
               Sua resposta já está contabilizada na computação dos Melhores do Jogo!
             </div>
-
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={() => setStep('identify')}
-                className="px-6 py-3 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-2xl text-xs font-bold transition cursor-pointer"
-              >
-                Alterar Identificação
-              </button>
-            </div>
           </motion.div>
         )}
 
@@ -418,16 +499,6 @@ export default function PublicEvaluationView({
             <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 text-xs text-emerald-800 font-bold">
               🏆 Seus votos foram contabilizados nos resultados da partida!
             </div>
-
-            {onClosePublicView && (
-              <button
-                type="button"
-                onClick={onClosePublicView}
-                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold text-xs transition cursor-pointer shadow-md"
-              >
-                Voltar para o Sistema da Arena
-              </button>
-            )}
           </motion.div>
         )}
 
@@ -441,3 +512,4 @@ export default function PublicEvaluationView({
     </div>
   );
 }
+

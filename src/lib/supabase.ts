@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Court, Booking, BookingStudent, User, Player, PlayerRating, Sport, CourtTypeItem, RentalType, Teacher, Student, Team, TeamMember, AwardQuestion } from '../types';
+import { Court, Booking, BookingStudent, User, Player, PlayerRating, Sport, CourtTypeItem, RentalType, Teacher, Student, Team, TeamMember, AwardQuestion, Torcedor, AvaliacaoJogo } from '../types';
 import { INITIAL_TEACHERS, INITIAL_STUDENTS, INITIAL_COURT_TYPES, INITIAL_RENTAL_TYPES } from '../data/mockData';
 
 const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
@@ -1530,12 +1530,246 @@ export async function dbDeleteAwardQuestion(id: string): Promise<boolean> {
 }
 
 // ====================================================================
+// JOGADORES (tabela: jogadores)
+// ====================================================================
+
+export async function dbGetJogadores(bookingId?: string): Promise<Player[]> {
+  if (!supabase) return [];
+  try {
+    let query = supabase.from('jogadores').select('*').order('nome', { ascending: true });
+    if (bookingId && isValidUuid(bookingId)) {
+      query = query.eq('agendamento_id', bookingId);
+    }
+    const { data, error } = await query;
+    if (error || !data) return [];
+
+    return data.map((j) => ({
+      id: j.id,
+      name: j.nome,
+      email: j.email || undefined,
+      phone: j.telefone || undefined,
+      hasPaid: j.pago ?? false,
+      amount: Number(j.valor) || 0,
+    }));
+  } catch (err) {
+    console.warn('Erro ao buscar jogadores da tabela jogadores:', err);
+    return [];
+  }
+}
+
+export async function dbSaveJogador(player: Player, bookingId?: string): Promise<Player | null> {
+  if (!supabase) return null;
+
+  const dbPlayer: any = {
+    nome: player.name,
+    email: player.email || null,
+    telefone: player.phone || null,
+    pago: Boolean(player.hasPaid),
+    valor: Number(player.amount) || 0,
+  };
+
+  if (bookingId && isValidUuid(bookingId)) {
+    dbPlayer.agendamento_id = bookingId;
+  }
+
+  if (isValidUuid(player.id)) {
+    dbPlayer.id = player.id;
+  }
+
+  const { data, error } = await supabase
+    .from('jogadores')
+    .upsert(dbPlayer)
+    .select()
+    .single();
+
+  if (error || !data) {
+    console.error('Erro ao salvar jogador na tabela jogadores:', error);
+    return null;
+  }
+
+  return {
+    id: data.id,
+    name: data.nome,
+    email: data.email || undefined,
+    phone: data.telefone || undefined,
+    hasPaid: data.pago ?? false,
+    amount: Number(data.valor) || 0,
+  };
+}
+
+export async function dbDeleteJogador(id: string): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    if (isValidUuid(id)) {
+      await supabase.from('jogadores').delete().eq('id', id);
+    }
+    return true;
+  } catch (err) {
+    console.error('Erro ao excluir jogador:', err);
+    return false;
+  }
+}
+
+// ====================================================================
+// TORCEDORES (tabela: torcedores)
+// ====================================================================
+
+export async function dbGetTorcedores(bookingId?: string): Promise<Torcedor[]> {
+  if (!supabase) return [];
+  try {
+    let query = supabase.from('torcedores').select('*').order('nome', { ascending: true });
+    if (bookingId && isValidUuid(bookingId)) {
+      query = query.eq('agendamento_id', bookingId);
+    }
+    const { data, error } = await query;
+    if (error || !data) return [];
+
+    return data.map((t) => ({
+      id: t.id,
+      name: t.nome,
+      email: t.email || undefined,
+      phone: t.telefone || undefined,
+      favoriteTeam: t.time_favorito || undefined,
+      bookingId: t.agendamento_id || undefined,
+      createdAt: t.criado_em || undefined,
+    }));
+  } catch (err) {
+    console.warn('Erro ao buscar torcedores:', err);
+    return [];
+  }
+}
+
+export async function dbSaveTorcedor(torcedor: Partial<Torcedor> & { name: string }): Promise<Torcedor | null> {
+  if (!supabase) return null;
+
+  const dbTorcedor: any = {
+    nome: torcedor.name,
+    email: torcedor.email || null,
+    telefone: torcedor.phone || null,
+    time_favorito: torcedor.favoriteTeam || null,
+  };
+
+  if (torcedor.bookingId && isValidUuid(torcedor.bookingId)) {
+    dbTorcedor.agendamento_id = torcedor.bookingId;
+  }
+
+  if (torcedor.id && isValidUuid(torcedor.id)) {
+    dbTorcedor.id = torcedor.id;
+  }
+
+  const { data, error } = await supabase
+    .from('torcedores')
+    .upsert(dbTorcedor)
+    .select()
+    .single();
+
+  if (error || !data) {
+    console.error('Erro ao salvar torcedor:', error);
+    return null;
+  }
+
+  return {
+    id: data.id,
+    name: data.nome,
+    email: data.email || undefined,
+    phone: data.telefone || undefined,
+    favoriteTeam: data.time_favorito || undefined,
+    bookingId: data.agendamento_id || undefined,
+    createdAt: data.criado_em || undefined,
+  };
+}
+
+// ====================================================================
+// AVALIAÇÃO DO JOGO (tabela: avaliacao_jogo)
+// ====================================================================
+
+export async function dbGetAvaliacoesJogo(bookingId?: string): Promise<AvaliacaoJogo[]> {
+  if (!supabase) return [];
+  try {
+    let query = supabase.from('avaliacao_jogo').select('*').order('criado_em', { ascending: false });
+    if (bookingId && isValidUuid(bookingId)) {
+      query = query.eq('agendamento_id', bookingId);
+    }
+    const { data, error } = await query;
+    if (error || !data) return [];
+
+    return data.map((a) => ({
+      id: a.id,
+      bookingId: a.agendamento_id,
+      voterType: a.tipo_voter === 'torcedor' ? 'torcedor' : 'jogador',
+      jogadorId: a.jogador_id || undefined,
+      torcedorId: a.torcedor_id || undefined,
+      evaluatorName: a.avaliador_nome || undefined,
+      perguntaId: a.pergunta_id || undefined,
+      ratedPlayerName: a.jogador_avaliado_nome || undefined,
+      rating: Number(a.nota) || 5.0,
+      notes: a.observacao || undefined,
+      createdAt: a.criado_em || undefined,
+    }));
+  } catch (err) {
+    console.warn('Erro ao buscar avaliações do jogo:', err);
+    return [];
+  }
+}
+
+export async function dbSaveAvaliacaoJogo(evalItem: Partial<AvaliacaoJogo> & { bookingId: string, rating: number }): Promise<AvaliacaoJogo | null> {
+  if (!supabase) return null;
+
+  const dbEval: any = {
+    agendamento_id: evalItem.bookingId,
+    tipo_voter: evalItem.voterType || 'jogador',
+    avaliador_nome: evalItem.evaluatorName || null,
+    jogador_avaliado_nome: evalItem.ratedPlayerName || null,
+    nota: evalItem.rating,
+    observacao: evalItem.notes || null,
+  };
+
+  if (evalItem.jogadorId && isValidUuid(evalItem.jogadorId)) {
+    dbEval.jogador_id = evalItem.jogadorId;
+  }
+  if (evalItem.torcedorId && isValidUuid(evalItem.torcedorId)) {
+    dbEval.torcedor_id = evalItem.torcedorId;
+  }
+  if (evalItem.perguntaId && isValidUuid(evalItem.perguntaId)) {
+    dbEval.pergunta_id = evalItem.perguntaId;
+  }
+  if (evalItem.id && isValidUuid(evalItem.id)) {
+    dbEval.id = evalItem.id;
+  }
+
+  const { data, error } = await supabase
+    .from('avaliacao_jogo')
+    .upsert(dbEval)
+    .select()
+    .single();
+
+  if (error || !data) {
+    console.error('Erro ao salvar avaliação do jogo:', error);
+    return null;
+  }
+
+  return {
+    id: data.id,
+    bookingId: data.agendamento_id,
+    voterType: data.tipo_voter,
+    jogadorId: data.jogador_id || undefined,
+    torcedorId: data.torcedor_id || undefined,
+    evaluatorName: data.avaliador_nome || undefined,
+    perguntaId: data.pergunta_id || undefined,
+    ratedPlayerName: data.jogador_avaliado_nome || undefined,
+    rating: Number(data.nota),
+    notes: data.observacao || undefined,
+    createdAt: data.criado_em || undefined,
+  };
+}
+
+// ====================================================================
 // SCRIPT SQL DDL COMPLETO DAS TABELAS DO SISTEMA
 // ====================================================================
 
 export const SQL_SCHEMA_SCRIPT = `-- ============================================================
 -- SCRIPT DE CRIAÇÃO DAS TABELAS DO BANCO DE DADOS (SUPABASE / POSTGRESQL)
--- Arena Esportiva - Gestão de Agendamentos, Quadras, Aulas, Times e Avaliações
+-- Arena Esportiva - Gestão de Agendamentos, Quadras, Jogadores, Torcedores, Perguntas e Avaliações
 -- ============================================================
 
 -- Habilita extensão pgcrypto para UUIDs automáticos
@@ -1655,7 +1889,32 @@ CREATE TABLE IF NOT EXISTS public.jogadores_racha (
     criado_em TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 11. TABELA DE TIMES (CADASTRO DE EQUIPES)
+-- 11. TABELA DE JOGADORES (CADASTRO DE JOGADORES)
+CREATE TABLE IF NOT EXISTS public.jogadores (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT NOT NULL,
+    email TEXT,
+    telefone TEXT,
+    esporte TEXT DEFAULT 'Geral',
+    posicao TEXT,
+    pago BOOLEAN DEFAULT FALSE,
+    valor NUMERIC(10,2) DEFAULT 0.00,
+    agendamento_id UUID REFERENCES public.agendamentos(id) ON DELETE CASCADE,
+    criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 12. TABELA DE TORCEDORES (CADASTRO DE TORCEDORES / VOTANTES)
+CREATE TABLE IF NOT EXISTS public.torcedores (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT NOT NULL,
+    email TEXT,
+    telefone TEXT,
+    time_favorito TEXT,
+    agendamento_id UUID REFERENCES public.agendamentos(id) ON DELETE CASCADE,
+    criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 13. TABELA DE TIMES (CADASTRO DE EQUIPES)
 CREATE TABLE IF NOT EXISTS public.times (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nome TEXT NOT NULL,
@@ -1664,7 +1923,7 @@ CREATE TABLE IF NOT EXISTS public.times (
     criado_em TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 12. TABELA DE MEMBROS DO TIME (PARTICIPANTES DO TIME)
+-- 14. TABELA DE MEMBROS DO TIME (PARTICIPANTES DO TIME)
 CREATE TABLE IF NOT EXISTS public.membros_time (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     time_id UUID REFERENCES public.times(id) ON DELETE CASCADE,
@@ -1676,7 +1935,7 @@ CREATE TABLE IF NOT EXISTS public.membros_time (
     criado_em TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 13. TABELA DE PERGUNTAS DE AVALIAÇÃO / CATEGORIAS DE PREMIAÇÃO
+-- 15. TABELA DE PERGUNTAS DE AVALIAÇÃO / CATEGORIAS DE PREMIAÇÃO
 CREATE TABLE IF NOT EXISTS public.perguntas_avaliacao (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     titulo TEXT NOT NULL,
@@ -1687,7 +1946,16 @@ CREATE TABLE IF NOT EXISTS public.perguntas_avaliacao (
     criado_em TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 14. TABELA DE AVALIAÇÕES / VOTOS DOS JOGADORES PÓS-JOGO
+-- INSERÇÃO DAS PERGUNTAS / CATEGORIAS PADRÃO DE AVALIAÇÃO
+INSERT INTO public.perguntas_avaliacao (titulo, subtitulo, icone, esporte, ativo)
+VALUES 
+    ('Dono da Quadra (MVP)', 'Quem jogou demais, fez os melhores pontos e decidiu a partida?', 'Crown', 'Todos', true),
+    ('Resenha Pura (O Mais Alegre)', 'Quem manteve a vibe lá em cima, fez piada e alegrou o jogo?', 'Smile', 'Todos', true),
+    ('Sangue no Olho (Mais Esforçado)', 'Quem deu a vida em cada bola, correu na areia e não desistiu nunca?', 'Flame', 'Todos', true),
+    ('Ponto de Placa (A Melhor Jogada)', 'Quem protagonizou a jogada mais bonita (peixinho, cortada ou defesa inacreditável)?', 'Zap', 'Todos', true)
+ON CONFLICT DO NOTHING;
+
+-- 16. TABELA DE AVALIAÇÕES / VOTOS DOS JOGADORES PÓS-JOGO (TABELA ANTIGA DE SUPORTE)
 CREATE TABLE IF NOT EXISTS public.avaliacoes_jogadores (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     agendamento_id UUID REFERENCES public.agendamentos(id) ON DELETE CASCADE,
@@ -1699,14 +1967,32 @@ CREATE TABLE IF NOT EXISTS public.avaliacoes_jogadores (
     CONSTRAINT unique_voto_partida UNIQUE (agendamento_id, avaliador_nome, jogador_avaliado_nome)
 );
 
+-- 17. TABELA DE AVALIAÇÃO DO JOGO (VÍNCULO COM AGENDAMENTO, JOGADOR OU TORCEDOR, TIPO E NOTA)
+CREATE TABLE IF NOT EXISTS public.avaliacao_jogo (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agendamento_id UUID NOT NULL REFERENCES public.agendamentos(id) ON DELETE CASCADE,
+    tipo_voter TEXT NOT NULL CHECK (tipo_voter IN ('jogador', 'torcedor')),
+    jogador_id UUID REFERENCES public.jogadores(id) ON DELETE SET NULL,
+    torcedor_id UUID REFERENCES public.torcedores(id) ON DELETE SET NULL,
+    avaliador_nome TEXT,
+    pergunta_id UUID REFERENCES public.perguntas_avaliacao(id) ON DELETE SET NULL,
+    jogador_avaliado_nome TEXT,
+    nota NUMERIC(3,1) NOT NULL DEFAULT 5.0 CHECK (nota >= 1.0 AND nota <= 5.0),
+    observacao TEXT,
+    criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ============================================================
 -- ÍNDICES PARA ALTA PERFORMANCE
 -- ============================================================
 CREATE INDEX IF NOT EXISTS idx_agendamentos_data ON public.agendamentos(data);
 CREATE INDEX IF NOT EXISTS idx_agendamentos_quadra ON public.agendamentos(quadra_id);
+CREATE INDEX IF NOT EXISTS idx_jogadores_agendamento ON public.jogadores(agendamento_id);
+CREATE INDEX IF NOT EXISTS idx_torcedores_agendamento ON public.torcedores(agendamento_id);
 CREATE INDEX IF NOT EXISTS idx_jogadores_racha_agendamento ON public.jogadores_racha(agendamento_id);
 CREATE INDEX IF NOT EXISTS idx_membros_time_time ON public.membros_time(time_id);
 CREATE INDEX IF NOT EXISTS idx_avaliacoes_agendamento ON public.avaliacoes_jogadores(agendamento_id);
+CREATE INDEX IF NOT EXISTS idx_avaliacao_jogo_agendamento ON public.avaliacao_jogo(agendamento_id);
 `;
 
 
