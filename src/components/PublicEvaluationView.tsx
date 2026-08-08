@@ -56,8 +56,8 @@ export default function PublicEvaluationView({
     return booking.players || [];
   });
 
-  // Step flow: 'identify' -> 'evaluate' -> 'already_voted' -> 'completed'
-  const [step, setStep] = useState<'identify' | 'evaluate' | 'already_voted' | 'completed'>('identify');
+  // Step flow: 'identify' -> 'evaluate' -> 'already_voted' -> 'completed' -> 'results'
+  const [step, setStep] = useState<'identify' | 'evaluate' | 'already_voted' | 'completed' | 'results'>('identify');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [existingRatings, setExistingRatings] = useState<PlayerRating[]>([]);
 
@@ -432,6 +432,18 @@ export default function PublicEvaluationView({
                 <ArrowRight className="h-4 w-4" />
               </button>
 
+              {/* Direct Link to View Podium / Results */}
+              <div className="pt-2 text-center">
+                <button
+                  type="button"
+                  onClick={() => setStep('results')}
+                  className="text-xs font-bold text-amber-800 hover:text-amber-900 bg-amber-50 hover:bg-amber-100/80 border border-amber-200 px-4 py-2.5 rounded-2xl transition inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                >
+                  <Crown className="h-4 w-4 text-amber-500 shrink-0" />
+                  <span>Ver Pódio & Classificação do Racha 🏆</span>
+                </button>
+              </div>
+
             </form>
           </motion.div>
         )}
@@ -456,23 +468,33 @@ export default function PublicEvaluationView({
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-3xl border border-amber-200 p-8 shadow-xl text-center space-y-4"
+            className="bg-white rounded-3xl border border-amber-200 p-6 sm:p-8 shadow-xl text-center space-y-5"
           >
             <div className="w-16 h-16 bg-amber-50 text-amber-600 border border-amber-200 rounded-3xl flex items-center justify-center mx-auto">
               <ShieldAlert className="h-8 w-8" />
             </div>
 
-            <h2 className="text-2xl font-black text-slate-900">
-              Avaliação Já Registrada!
-            </h2>
-
-            <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto leading-relaxed font-medium">
-              Verificamos que uma avaliação para a partida de <strong className="text-blue-700">{booking.sport}</strong> já foi enviada em seu nome (<strong>{finalVoterName}</strong>) ou neste dispositivo.
-            </p>
+            <div className="space-y-1">
+              <h2 className="text-2xl font-black text-slate-900">
+                Avaliação Já Registrada!
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto leading-relaxed font-medium">
+                Verificamos que uma avaliação para a partida de <strong className="text-blue-700">{booking.sport}</strong> já foi enviada em seu nome (<strong>{finalVoterName}</strong>) ou neste dispositivo.
+              </p>
+            </div>
 
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-500 font-medium">
               Sua resposta já está contabilizada na computação dos Melhores do Jogo!
             </div>
+
+            <button
+              type="button"
+              onClick={() => setStep('results')}
+              className="w-full py-4 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:brightness-105 text-slate-950 font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer transition"
+            >
+              <Crown className="h-4.5 w-4.5 shrink-0" />
+              <span>Ver Classificação & Pódio do Racha 🏆</span>
+            </button>
           </motion.div>
         )}
 
@@ -481,24 +503,71 @@ export default function PublicEvaluationView({
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-3xl border border-emerald-200 p-8 shadow-xl text-center space-y-5"
+            className="space-y-6"
           >
-            <div className="w-16 h-16 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-3xl flex items-center justify-center mx-auto">
-              <CheckCircle className="h-8 w-8" />
+            <div className="bg-white rounded-3xl border border-emerald-200 p-6 sm:p-8 shadow-xl text-center space-y-5">
+              <div className="w-16 h-16 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-3xl flex items-center justify-center mx-auto">
+                <CheckCircle className="h-8 w-8" />
+              </div>
+
+              <div className="space-y-1">
+                <h2 className="text-2xl font-black text-slate-900">
+                  Avaliação Enviada com Sucesso!
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-600 font-medium">
+                  Obrigado por votar nos Melhores do Jogo da Arena!
+                </p>
+              </div>
+
+              <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 text-xs text-emerald-800 font-bold">
+                🏆 Seus votos foram contabilizados nos resultados da partida!
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setStep('results')}
+                className="w-full py-4 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:brightness-105 text-slate-950 font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer transition"
+              >
+                <Crown className="h-5 w-5 shrink-0" />
+                <span>Ver Pódio & Resultado Final 🏆</span>
+              </button>
             </div>
 
-            <div className="space-y-1">
-              <h2 className="text-2xl font-black text-slate-900">
-                Avaliação Enviada com Sucesso!
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-600 font-medium">
-                Obrigado por votar nos Melhores do Jogo da Arena!
-              </p>
+            {/* Embedded Podium */}
+            <PostGameAwards
+              selectedBooking={bookingWithUpdatedPlayers}
+              initialVoterName={finalVoterName}
+              initialFinished={true}
+            />
+          </motion.div>
+        )}
+
+        {/* DEDICATED RESULTS SCREEN */}
+        {step === 'results' && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="space-y-4"
+          >
+            <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <div className="flex items-center gap-2">
+                <Crown className="h-5 w-5 text-amber-500 shrink-0" />
+                <span className="text-xs font-black text-slate-900">Resultado & Pódio dos Mais Votados</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStep('identify')}
+                className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition cursor-pointer"
+              >
+                ⬅️ Tela Inicial
+              </button>
             </div>
 
-            <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 text-xs text-emerald-800 font-bold">
-              🏆 Seus votos foram contabilizados nos resultados da partida!
-            </div>
+            <PostGameAwards
+              selectedBooking={bookingWithUpdatedPlayers}
+              initialVoterName={finalVoterName}
+              initialFinished={true}
+            />
           </motion.div>
         )}
 

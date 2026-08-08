@@ -70,3 +70,23 @@ export const timeToMinutes = (timeStr: string): number => {
   const [h, m] = timeStr.split(':').map(Number);
   return h * 60 + m;
 };
+
+// Calculate weekly recurring dates for a 30-day period starting from startDateStr
+export const getMensalistaDates = (startDateStr: string): string[] => {
+  if (!startDateStr) return [];
+  const dates: string[] = [];
+  const [y, m, d] = startDateStr.split('-').map(Number);
+  const startDate = new Date(y, m - 1, d);
+
+  for (let i = 0; ; i += 7) {
+    if (i > 30) break;
+    const nextDate = new Date(startDate.getTime());
+    nextDate.setDate(startDate.getDate() + i);
+
+    const year = nextDate.getFullYear();
+    const month = String(nextDate.getMonth() + 1).padStart(2, '0');
+    const day = String(nextDate.getDate()).padStart(2, '0');
+    dates.push(`${year}-${month}-${day}`);
+  }
+  return dates;
+};

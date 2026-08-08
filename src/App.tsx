@@ -34,7 +34,6 @@ import PaymentHistory from './components/PaymentHistory';
 import CourtManager from './components/CourtManager';
 import BookingModal from './components/BookingModal';
 import PlayerSplitManager from './components/PlayerSplitManager';
-import PlayerRatingManager from './components/PlayerRatingManager';
 import Login from './components/Login';
 import UserManager from './components/UserManager';
 import AwardQuestionsManager, { INITIAL_AWARD_QUESTIONS } from './components/AwardQuestionsManager';
@@ -308,19 +307,28 @@ export default function App() {
   };
 
   // Handlers for booking actions
-  const handleSaveBooking = async (booking: Booking) => {
+  const handleSaveBooking = async (bookingOrBookings: Booking | Booking[]) => {
+    const newBookings = Array.isArray(bookingOrBookings) ? bookingOrBookings : [bookingOrBookings];
+
     // Atualização otimista no React State
     setBookings((prev) => {
-      const exists = prev.some((b) => b.id === booking.id);
-      if (exists) {
-        return prev.map((b) => (b.id === booking.id ? booking : b));
+      let updated = [...prev];
+      for (const b of newBookings) {
+        const existsIndex = updated.findIndex((item) => item.id === b.id);
+        if (existsIndex >= 0) {
+          updated[existsIndex] = b;
+        } else {
+          updated.push(b);
+        }
       }
-      return [...prev, booking];
+      return updated;
     });
 
     if (isSupabaseConfigured) {
       try {
-        await dbSaveBooking(booking);
+        for (const b of newBookings) {
+          await dbSaveBooking(b);
+        }
         const updated = await dbGetBookings();
         setBookings(updated);
         setDbError(null);
@@ -606,7 +614,9 @@ export default function App() {
   };
 
   if (publicEvalBookingId) {
-    const targetBooking = bookings.find(b => b.id === publicEvalBookingId);
+    const cleanId = publicEvalBookingId.trim();
+    const targetBooking = bookings.find(b => b.id.trim() === cleanId);
+
     if (targetBooking) {
       const courtName = courts.find(c => c.id === targetBooking.courtId)?.name || 'Quadra da Arena';
       return (
@@ -616,26 +626,40 @@ export default function App() {
           onClosePublicView={clearPublicEval}
         />
       );
-    } else {
-      // Fallback if booking ID not found in current state (e.g. invalid link or missing)
+    }
+
+    if (dbLoading) {
       return (
         <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6 text-center space-y-4">
-          <div className="p-4 bg-amber-500/20 text-amber-400 rounded-3xl border border-amber-500/30">
-            <Trophy className="h-10 w-10 mx-auto" />
+          <div className="p-4 bg-blue-500/20 text-blue-400 rounded-3xl border border-blue-500/30">
+            <Volleyball className="h-10 w-10 mx-auto animate-spin-slow" />
           </div>
-          <h1 className="text-2xl font-black">Partida não Encontrada</h1>
+          <h1 className="text-xl font-bold">Carregando Avaliação...</h1>
           <p className="text-xs text-slate-400 max-w-sm">
-            O código da partida fornecido no link não corresponde a nenhum agendamento ativo. Verifique se o link está correto.
+            Buscando informações da partida, por favor aguarde um momento.
           </p>
-          <button
-            onClick={clearPublicEval}
-            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl text-xs font-bold transition cursor-pointer"
-          >
-            Acessar o Sistema
-          </button>
         </div>
       );
     }
+
+    // Fallback if booking ID not found in current state (e.g. invalid link or missing)
+    return (
+      <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6 text-center space-y-4">
+        <div className="p-4 bg-amber-500/20 text-amber-400 rounded-3xl border border-amber-500/30">
+          <Trophy className="h-10 w-10 mx-auto" />
+        </div>
+        <h1 className="text-2xl font-black">Partida não Encontrada</h1>
+        <p className="text-xs text-slate-400 max-w-sm">
+          O código da partida fornecido no link não corresponde a nenhum agendamento ativo. Verifique se o link está correto.
+        </p>
+        <button
+          onClick={clearPublicEval}
+          className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl text-xs font-bold transition cursor-pointer"
+        >
+          Acessar o Sistema
+        </button>
+      </div>
+    );
   }
 
   if (!currentUser) {
@@ -742,19 +766,6 @@ export default function App() {
             >
               <Users className="h-4.5 w-4.5" />
               Racha & Jogadores
-            </button>
-
-            <button
-              id="nav-avaliacoes"
-              onClick={() => { setActiveTab('avaliacoes'); setMobileMenuOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                activeTab === 'avaliacoes' 
-                  ? 'bg-blue-50 text-blue-600 font-bold' 
-                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
-              }`}
-            >
-              <Trophy className="h-4.5 w-4.5" />
-              Melhores do Jogo
             </button>
 
             {currentUser.role === 'Administrador' && (
@@ -950,20 +961,6 @@ export default function App() {
                 bookings={bookings}
                 courts={courts}
                 onSaveBooking={handleSaveBooking}
-              />
-            </motion.div>
-          )}
-
-          {activeTab === 'avaliacoes' && (
-            <motion.div
-              key="avaliacoes"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              transition={{ duration: 0.2 }}
-            >
-              <PlayerRatingManager 
-                bookings={bookings}
               />
             </motion.div>
           )}

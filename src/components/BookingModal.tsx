@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Court, Booking, BookingStudent, Player, SportType, BookingType, PaymentStatus, PaymentMethod, RentalType, Sport, Teacher, Student, Team } from '../types';
 import { INITIAL_RENTAL_TYPES, INITIAL_SPORTS, INITIAL_TEACHERS, INITIAL_STUDENTS } from '../data/mockData';
-import { TIME_SLOTS, formatCurrency, getBookingOverlap, formatPhoneNumber, timeToMinutes } from '../utils';
+import { TIME_SLOTS, formatCurrency, getBookingOverlap, formatPhoneNumber, timeToMinutes, getMensalistaDates } from '../utils';
 import { 
   X, 
   Calendar, 
@@ -41,7 +41,7 @@ interface BookingModalProps {
   presetCourtId?: string;
   presetStartTime?: string;
   editingBooking?: Booking; // If provided, edit mode
-  onSaveBooking: (booking: Booking) => void;
+  onSaveBooking: (booking: Booking | Booking[]) => void;
   onDeleteBooking?: (bookingId: string) => void;
   isAdmin?: boolean;
 }
@@ -148,6 +148,35 @@ export default function BookingModal({
   const [isCustomPrice, setIsCustomPrice] = useState(false);
   const [overlapWarning, setOverlapWarning] = useState<string | null>(null);
 
+  // Day Use specific state
+  const [dayUseQuantity, setDayUseQuantity] = useState<number>(1);
+  const [dayUseUnitPrice, setDayUseUnitPrice] = useState<number>(0);
+
+  const handleDayUseQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseInt(e.target.value, 10);
+    const qty = isNaN(val) ? 0 : Math.max(0, val);
+    setDayUseQuantity(qty);
+    const newTotal = qty * dayUseUnitPrice;
+    setTotalValue(newTotal);
+    setIsCustomPrice(true);
+  };
+
+  const handleDayUseUnitPriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value;
+    const digits = rawVal.replace(/\D/g, '');
+    if (!digits) {
+      setDayUseUnitPrice(0);
+      setTotalValue(0);
+      setIsCustomPrice(true);
+      return;
+    }
+    const numeric = parseFloat(digits) / 100;
+    setDayUseUnitPrice(numeric);
+    const newTotal = dayUseQuantity * numeric;
+    setTotalValue(newTotal);
+    setIsCustomPrice(true);
+  };
+
   // Keep formattedValue in sync with totalValue
   useEffect(() => {
     setFormattedValue(totalValue.toFixed(2).replace('.', ','));
@@ -229,7 +258,15 @@ export default function BookingModal({
         setStartTime(editingBooking.startTime);
         setEndTime(editingBooking.endTime);
         setSport(editingBooking.sport);
-        setBookingType(editingBooking.bookingType || 'Aluguel');
+        const editingType = editingBooking.bookingType || 'Aluguel';
+        setBookingType(editingType);
+        if (editingType.toLowerCase().includes('day use')) {
+          setDayUseQuantity(1);
+          setDayUseUnitPrice(editingBooking.totalValue ?? 0);
+        } else {
+          setDayUseQuantity(1);
+          setDayUseUnitPrice(0);
+        }
         
         const matchedT = findTeacher(
           editingBooking.teacherId,
@@ -275,7 +312,18 @@ export default function BookingModal({
         setEndTime(nextHourStr);
         
         setSport((sports[0]?.name as SportType) || '');
-        setBookingType((rentalTypes[0]?.name as BookingType) || '');
+        const initType = (rentalTypes[0]?.name as BookingType) || '';
+        setBookingType(initType);
+        if (initType.toLowerCase().includes('day use')) {
+          const initPrice = courts[0]?.pricePerHour || 30;
+          setDayUseQuantity(1);
+          setDayUseUnitPrice(initPrice);
+          setTotalValue(initPrice);
+          setIsCustomPrice(true);
+        } else {
+          setDayUseQuantity(1);
+          setDayUseUnitPrice(0);
+        }
         setTeacherId('');
         setTeacherName('');
         setStudentId('');
@@ -345,24 +393,58 @@ export default function BookingModal({
       return;
     }
 
-    const overlap = getBookingOverlap(
-      bookings,
-      courtId,
-      date,
-      startTime,
-      endTime,
-      editingBooking?.id
-    );
+    const isMensalista = (bookingType || '').toLowerCase().includes('mensalista');
 
-    if (overlap) {
-      setOverlapWarning(`Indisponível! Conflito com agendamento de ${overlap.customerName} (${overlap.startTime} - ${overlap.endTime})`);
+    if (isMensalista) {
+      const dates = getMensalistaDates(date);
+      let conflictFound: { date: string; overlap: Booking } | null = null;
+
+      for (const d of dates) {
+        const overlap = getBookingOverlap(
+          bookings,
+          courtId,
+          d,
+          startTime,
+          endTime,
+          editingBooking?.id
+        );
+        if (overlap) {
+          conflictFound = { date: d, overlap };
+          break;
+        }
+      }
+
+      if (conflictFound) {
+        const [cy, cm, cd] = conflictFound.date.split('-');
+        const formattedDate = `${cd}/${cm}/${cy}`;
+        setOverlapWarning(
+          `Indisponível para Mensalista! Conflito no dia ${formattedDate} (${conflictFound.overlap.startTime} - ${conflictFound.overlap.endTime}) com ${conflictFound.overlap.customerName}. Nenhum agendamento será registrado.`
+        );
+      } else {
+        setOverlapWarning(null);
+      }
     } else {
-      setOverlapWarning(null);
+      const overlap = getBookingOverlap(
+        bookings,
+        courtId,
+        date,
+        startTime,
+        endTime,
+        editingBooking?.id
+      );
+
+      if (overlap) {
+        setOverlapWarning(`Indisponível! Conflito com agendamento de ${overlap.customerName} (${overlap.startTime} - ${overlap.endTime})`);
+      } else {
+        setOverlapWarning(null);
+      }
     }
 
   }, [courtId, date, startTime, endTime, bookings, courts, editingBooking, isCustomPrice, bookingType]);
 
   const isClassBooking = (bookingType || '').toLowerCase().includes('aula');
+  const isDayUse = (bookingType || '').toLowerCase().includes('day use');
+  const isMensalista = (bookingType || '').toLowerCase().includes('mensalista');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -378,6 +460,65 @@ export default function BookingModal({
     }
     const finalCustomerPhone = customerPhone.trim() || (bookingType === 'Manutenção' || isClassBooking ? '-' : '');
     if (!finalCustomerName) return;
+
+    if (isMensalista) {
+      const dates = getMensalistaDates(date);
+
+      // Strict check: Verify NO conflict exists on ANY date in the 30-day period
+      let conflictFound: { date: string; overlap: Booking } | null = null;
+      for (const d of dates) {
+        const overlap = getBookingOverlap(
+          bookings,
+          courtId,
+          d,
+          startTime,
+          endTime,
+          editingBooking?.id
+        );
+        if (overlap) {
+          conflictFound = { date: d, overlap };
+          break;
+        }
+      }
+
+      if (conflictFound) {
+        const [cy, cm, cd] = conflictFound.date.split('-');
+        const formattedDate = `${cd}/${cm}/${cy}`;
+        setOverlapWarning(
+          `Já existe outro agendamento registrado no período! Conflito no dia ${formattedDate} (${conflictFound.overlap.startTime} - ${conflictFound.overlap.endTime}) com ${conflictFound.overlap.customerName}. O agendamento mensalista foi cancelado.`
+        );
+        return; // STOP! Cancel entire process!
+      }
+
+      // No conflict found! Register all bookings in the 30-day period
+      const now = Date.now();
+      const savedBookings: Booking[] = dates.map((d, index) => ({
+        id: (editingBooking && index === 0) ? editingBooking.id : `book-${now}-${index}`,
+        courtId,
+        customerName: finalCustomerName,
+        customerPhone: finalCustomerPhone,
+        date: d,
+        startTime,
+        endTime,
+        sport,
+        bookingType,
+        teacherId: teacherId || undefined,
+        teacherName: teacherName || undefined,
+        students: selectedStudents.length > 0 ? selectedStudents : (isClassBooking ? selectedStudents : undefined),
+        studentId: selectedStudents[0]?.studentId || studentId || undefined,
+        studentName: selectedStudents[0]?.studentName || studentName || undefined,
+        totalValue,
+        paymentStatus,
+        paymentMethod,
+        notes: notes.trim() ? `${notes.trim()} (Mensalista ${index + 1}/${dates.length})` : undefined,
+        createdAt: editingBooking?.createdAt || new Date().toISOString(),
+        players
+      }));
+
+      onSaveBooking(savedBookings);
+      onClose();
+      return;
+    }
 
     const saved: Booking = {
       id: editingBooking?.id || `book-${Date.now()}`,
@@ -579,7 +720,18 @@ export default function BookingModal({
                 <FileText className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
                 <select
                   value={bookingType}
-                  onChange={(e) => setBookingType(e.target.value as BookingType)}
+                  onChange={(e) => {
+                    const newType = e.target.value as BookingType;
+                    setBookingType(newType);
+                    if (newType.toLowerCase().includes('day use')) {
+                      const defaultUnit = totalValue > 0 ? totalValue : (courts.find(c => c.id === courtId)?.pricePerHour || 30);
+                      const qty = dayUseQuantity || 1;
+                      setDayUseQuantity(qty);
+                      setDayUseUnitPrice(defaultUnit);
+                      setTotalValue(qty * defaultUnit);
+                      setIsCustomPrice(true);
+                    }
+                  }}
                   className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-semibold text-slate-700 cursor-pointer"
                 >
                   {rentalTypes.length === 0 ? (
@@ -766,6 +918,32 @@ export default function BookingModal({
                 </select>
               </div>
             </div>
+
+            {/* Mensalista Recurrence Preview */}
+            {isMensalista && date && (
+              <div className="mt-2 p-3 bg-blue-50/90 border border-blue-200/90 rounded-xl text-xs text-blue-900 flex items-start gap-2.5 shadow-2xs">
+                <Calendar className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <span className="font-extrabold block text-blue-950">
+                    🗓️ Recorrência Mensalista (30 Dias)
+                  </span>
+                  <p className="text-[11px] text-blue-800 leading-relaxed">
+                    Este agendamento será repetido semanalmente por 30 dias no mesmo horário e quadra (
+                    <span className="font-bold">{getMensalistaDates(date).length} sessões</span>):
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {getMensalistaDates(date).map((d) => {
+                      const [cy, cm, cd] = d.split('-');
+                      return (
+                        <span key={d} className="px-2 py-0.5 bg-blue-100/90 text-blue-950 rounded-md font-mono text-[10px] font-bold border border-blue-200/80 shadow-2xs">
+                          {cd}/{cm}/{cy}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Payment Details */}
@@ -816,44 +994,124 @@ export default function BookingModal({
             </div>
 
             {/* Price Preview / Editable Rental Value */}
-            <div className="mt-3 pt-3 border-t border-slate-200 flex justify-between items-center gap-4">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-700">Valor do Aluguel (R$):</span>
-                {isCustomPrice && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsCustomPrice(false);
-                      const selectedCourt = courts.find(c => c.id === courtId);
-                      const startMin = timeToMinutes(startTime);
-                      const endMin = timeToMinutes(endTime);
-                      const diffHours = (endMin - startMin) / 60;
-                      if (selectedCourt && diffHours > 0) {
-                        setTotalValue(diffHours * selectedCourt.pricePerHour);
-                      } else {
-                        setTotalValue(0);
-                      }
-                    }}
-                    className="text-[10px] text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-0.5 rounded-full font-semibold transition cursor-pointer"
-                    title="Restaurar valor automático da tabela da quadra"
-                  >
-                    Restaurar tabela
-                  </button>
-                )}
+            {isDayUse ? (
+              <div className="mt-3 pt-3 border-t border-slate-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-amber-900 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200/80 flex items-center gap-1.5">
+                    ☀️ Day Use: Multiplicação (Qtd × Valor Unitário)
+                  </span>
+                  {isCustomPrice && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCustomPrice(false);
+                        const defaultUnit = courts.find(c => c.id === courtId)?.pricePerHour || 30;
+                        setDayUseQuantity(1);
+                        setDayUseUnitPrice(defaultUnit);
+                        setTotalValue(defaultUnit);
+                      }}
+                      className="text-[10px] text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-0.5 rounded-full font-semibold transition cursor-pointer"
+                      title="Restaurar padrão da tabela da quadra"
+                    >
+                      Restaurar tabela
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-end">
+                  {/* Quantidade */}
+                  <div>
+                    <label className="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider block mb-1">
+                      Quantidade
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={dayUseQuantity || ''}
+                      onChange={handleDayUseQuantityChange}
+                      className="w-full text-center text-sm font-black text-slate-900 bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs font-mono"
+                      placeholder="1"
+                    />
+                  </div>
+
+                  {/* Valor Unitário */}
+                  <div>
+                    <label className="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider block mb-1">
+                      Valor Unitário (R$)
+                    </label>
+                    <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 focus-within:ring-2 focus-within:ring-blue-500 shadow-2xs">
+                      <span className="text-xs font-bold text-slate-400">R$</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={dayUseUnitPrice.toFixed(2).replace('.', ',')}
+                        onChange={handleDayUseUnitPriceChange}
+                        className="w-full text-right text-sm font-black text-slate-900 bg-transparent focus:outline-none font-mono"
+                        placeholder="00,00"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Valor Total / Aluguel */}
+                  <div>
+                    <label className="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider block mb-1">
+                      Valor do Aluguel
+                    </label>
+                    <div className="flex items-center gap-1 bg-slate-100 border border-slate-300 rounded-xl px-2.5 py-1.5 shadow-2xs">
+                      <span className="text-xs font-bold text-slate-500">R$</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={formattedValue}
+                        onChange={handleCurrencyChange}
+                        className="w-full text-right text-sm font-black text-slate-900 bg-transparent focus:outline-none font-mono"
+                        placeholder="00,00"
+                        title="Valor do aluguel (calculado automaticamente Qtd x Unitário)"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-sm font-bold text-slate-500">R$</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={formattedValue}
-                  onChange={handleCurrencyChange}
-                  className="w-28 text-right text-base font-black text-slate-900 bg-white border border-slate-300 rounded-xl px-2.5 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-2xs font-mono"
-                  placeholder="00,00"
-                  title="Valor do aluguel (mascara 00,00)"
-                />
+            ) : (
+              <div className="mt-3 pt-3 border-t border-slate-200 flex justify-between items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-700">Valor do Aluguel (R$):</span>
+                  {isCustomPrice && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCustomPrice(false);
+                        const selectedCourt = courts.find(c => c.id === courtId);
+                        const startMin = timeToMinutes(startTime);
+                        const endMin = timeToMinutes(endTime);
+                        const diffHours = (endMin - startMin) / 60;
+                        if (selectedCourt && diffHours > 0) {
+                          setTotalValue(diffHours * selectedCourt.pricePerHour);
+                        } else {
+                          setTotalValue(0);
+                        }
+                      }}
+                      className="text-[10px] text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-0.5 rounded-full font-semibold transition cursor-pointer"
+                      title="Restaurar valor automático da tabela da quadra"
+                    >
+                      Restaurar tabela
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-bold text-slate-500">R$</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formattedValue}
+                    onChange={handleCurrencyChange}
+                    className="w-28 text-right text-base font-black text-slate-900 bg-white border border-slate-300 rounded-xl px-2.5 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-2xs font-mono"
+                    placeholder="00,00"
+                    title="Valor do aluguel (mascara 00,00)"
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Notes */}
@@ -881,18 +1139,33 @@ export default function BookingModal({
           <div className="p-6 pt-3 border-t border-slate-100 flex flex-wrap sm:flex-nowrap justify-between items-center gap-3 shrink-0 bg-slate-50/50">
             {editingBooking ? (
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const origin = window.location.origin + window.location.pathname;
-                    window.open(`${origin}?eval=${editingBooking.id}`, '_blank');
-                  }}
-                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
-                  title="Abrir página de avaliação pública do jogo"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  <span>Link de Avaliação</span>
-                </button>
+                {(() => {
+                  const currentCourt = courts.find(c => c.id === courtId || c.id === editingBooking.courtId);
+                  const isCourtMaintenance = currentCourt?.status === 'Manutenção';
+                  const isBookingMaintenance = bookingType === 'Manutenção' || (bookingType || '').toLowerCase().includes('manutenção') || (editingBooking.bookingType || '').toLowerCase().includes('manutenção');
+                  const isMaintenance = isCourtMaintenance || isBookingMaintenance;
+
+                  return (
+                    <button
+                      type="button"
+                      disabled={isMaintenance}
+                      onClick={() => {
+                        if (isMaintenance) return;
+                        const origin = window.location.origin + window.location.pathname;
+                        window.open(`${origin}?eval=${editingBooking.id}`, '_blank');
+                      }}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 shadow-xs ${
+                        isMaintenance
+                          ? 'bg-slate-200 text-slate-400 cursor-not-allowed opacity-60 border border-slate-300'
+                          : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
+                      }`}
+                      title={isMaintenance ? 'Quadra/Agendamento em manutenção - Link de avaliação indisponível' : 'Abrir página de avaliação pública do jogo'}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      <span>Link de Avaliação</span>
+                    </button>
+                  );
+                })()}
 
                 {onDeleteBooking && (
                   <div>

@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
-import { Booking, AwardQuestion } from '../types';
+import { Booking, AwardQuestion, AvaliacaoJogo } from '../types';
 import { INITIAL_AWARD_QUESTIONS, getIconComponent } from './AwardQuestionsManager';
-import { isSupabaseConfigured, dbSaveRating, dbSaveAvaliacaoJogo } from '../lib/supabase';
+import { isSupabaseConfigured, dbSaveRating, dbSaveAvaliacaoJogo, dbGetAvaliacoesJogo } from '../lib/supabase';
 import { 
   Trophy, 
   Sparkles, 
@@ -106,9 +106,16 @@ interface PostGameAwardsProps {
   onVoteSubmitted?: (votes: Record<string, string>, voterName: string) => void;
   onClose?: () => void;
   initialVoterName?: string;
+  initialFinished?: boolean;
 }
 
-export default function PostGameAwards({ selectedBooking, onVoteSubmitted, onClose, initialVoterName }: PostGameAwardsProps) {
+export default function PostGameAwards({
+  selectedBooking,
+  onVoteSubmitted,
+  onClose,
+  initialVoterName,
+  initialFinished = false
+}: PostGameAwardsProps) {
   // Dynamically load active categories from registered questions
   const categories = useMemo(() => {
     return loadAwardCategories(selectedBooking.sport);
@@ -132,7 +139,44 @@ export default function PostGameAwards({ selectedBooking, onVoteSubmitted, onClo
   const [selectedPlayerPerCategory, setSelectedPlayerPerCategory] = useState<Record<string, string>>({});
 
   // Completed / Finished state
-  const [isFinished, setIsFinished] = useState<boolean>(false);
+  const [isFinished, setIsFinished] = useState<boolean>(initialFinished);
+
+  useEffect(() => {
+    if (initialFinished) {
+      setIsFinished(true);
+    }
+  }, [initialFinished]);
+
+  // All evaluations recorded for this booking
+  const [allAvaliacoes, setAllAvaliacoes] = useState<AvaliacaoJogo[]>([]);
+  const [selectedPodiumCategory, setSelectedPodiumCategory] = useState<string>('all');
+
+  // Load recorded evaluations for Podium display
+  useEffect(() => {
+    async function fetchVotes() {
+      let list: AvaliacaoJogo[] = [];
+      if (isSupabaseConfigured) {
+        try {
+          list = await dbGetAvaliacoesJogo(selectedBooking.id);
+        } catch (_) {}
+      }
+      const local = localStorage.getItem(`avaliacoes_${selectedBooking.id}`);
+      if (local) {
+        try {
+          const parsed = JSON.parse(local);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((item: any) => {
+              if (!list.some(db => db.evaluatorName === item.evaluatorName && db.perguntaId === item.perguntaId)) {
+                list.push(item);
+              }
+            });
+          }
+        } catch (_) {}
+      }
+      setAllAvaliacoes(list);
+    }
+    fetchVotes();
+  }, [selectedBooking.id, isFinished]);
 
   // All players in this booking
   const allPlayers = selectedBooking.players || [];
@@ -198,13 +242,24 @@ export default function PostGameAwards({ selectedBooking, onVoteSubmitted, onClo
   const triggerCompletion = () => {
     setIsFinished(true);
 
+    const newLocalVotes: any[] = [];
+
     // Save votes to database if Supabase is configured
-    if (isSupabaseConfigured) {
-      Object.entries(selectedPlayerPerCategory).forEach(([catId, votedPlayerId]) => {
-        const votedPlayerObj = eligibleNominees.find(p => p.id === votedPlayerId || p.name === votedPlayerId);
-        const votedPlayerName: string = votedPlayerObj ? votedPlayerObj.name : String(votedPlayerId || '');
-        
-        if (votedPlayerName) {
+    Object.entries(selectedPlayerPerCategory).forEach(([catId, votedPlayerId]) => {
+      const votedPlayerObj = eligibleNominees.find(p => p.id === votedPlayerId || p.name === votedPlayerId) || allPlayers.find(p => p.id === votedPlayerId || p.name === votedPlayerId);
+      const votedPlayerName: string = votedPlayerObj ? votedPlayerObj.name : String(votedPlayerId || '');
+      
+      if (votedPlayerName) {
+        newLocalVotes.push({
+          bookingId: selectedBooking.id,
+          voterType: 'jogador',
+          evaluatorName: voterName,
+          perguntaId: catId,
+          ratedPlayerName: votedPlayerName,
+          rating: 5,
+        });
+
+        if (isSupabaseConfigured) {
           dbSaveRating({
             bookingId: selectedBooking.id,
             evaluatorName: voterName,
@@ -222,8 +277,21 @@ export default function PostGameAwards({ selectedBooking, onVoteSubmitted, onClo
             rating: 5,
           });
         }
-      });
+      }
+    });
+
+    // Save to localStorage as backup/offline support
+    const localKey = `avaliacoes_${selectedBooking.id}`;
+    let localList: any[] = [];
+    const stored = localStorage.getItem(localKey);
+    if (stored) {
+      try { localList = JSON.parse(stored); } catch (_) {}
     }
+    // Filter out previous votes by this voter to handle vote updates
+    localList = localList.filter((a: any) => a.evaluatorName !== voterName);
+    localList.push(...newLocalVotes);
+    localStorage.setItem(localKey, JSON.stringify(localList));
+    setAllAvaliacoes(localList);
 
     // Launch Confetti
     try {
@@ -257,6 +325,47 @@ export default function PostGameAwards({ selectedBooking, onVoteSubmitted, onClo
     if (onVoteSubmitted) {
       onVoteSubmitted(selectedPlayerPerCategory, voterName);
     }
+  };
+
+  // Helper to calculate Podium ranking
+  const getPodiumData = (catId: string) => {
+    const counts: Record<string, number> = {};
+
+    const filtered = allAvaliacoes.filter(a => {
+      if (catId === 'all') return true;
+      return a.perguntaId === catId;
+    });
+
+    filtered.forEach(a => {
+      const name = a.ratedPlayerName?.trim();
+      if (name) {
+        counts[name] = (counts[name] || 0) + 1;
+      }
+    });
+
+    // Also include current session votes if not in filtered
+    if (catId === 'all') {
+      Object.entries(selectedPlayerPerCategory).forEach(([cId, pVal]) => {
+        const pObj = eligibleNominees.find(p => p.id === pVal || p.name === pVal) || allPlayers.find(p => p.id === pVal || p.name === pVal);
+        const pName: string = pObj ? pObj.name : String(pVal || '');
+        if (pName && !filtered.some(f => f.perguntaId === cId && f.evaluatorName === voterName)) {
+          counts[pName] = (counts[pName] || 0) + 1;
+        }
+      });
+    } else {
+      const pVal = selectedPlayerPerCategory[catId];
+      if (pVal) {
+        const pObj = eligibleNominees.find(p => p.id === pVal || p.name === pVal) || allPlayers.find(p => p.id === pVal || p.name === pVal);
+        const pName: string = pObj ? pObj.name : String(pVal || '');
+        if (pName && !filtered.some(f => f.perguntaId === catId && f.evaluatorName === voterName)) {
+          counts[pName] = (counts[pName] || 0) + 1;
+        }
+      }
+    }
+
+    return Object.entries(counts)
+      .map(([name, votes]) => ({ name, votes }))
+      .sort((a, b) => b.votes - a.votes);
   };
 
   // Restart / Revote
@@ -523,6 +632,138 @@ export default function PostGameAwards({ selectedBooking, onVoteSubmitted, onClo
               </p>
             </div>
 
+            {/* PODIUM OF TOP VOTED PLAYERS */}
+            {(() => {
+              const podiumList = getPodiumData(selectedPodiumCategory);
+              return (
+                <div className="w-full max-w-lg bg-white text-slate-800 p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-md space-y-5">
+                  <div className="text-center space-y-1">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200/80 rounded-full text-[11px] font-black">
+                      <Crown className="h-3.5 w-3.5 text-amber-500" />
+                      <span>Pódio dos Mais Votados</span>
+                    </div>
+                    <h3 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+                      Classificação do Racha 🏆
+                    </h3>
+                  </div>
+
+                  {/* Category selector filter pills */}
+                  <div className="flex flex-wrap items-center justify-center gap-1.5 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200/80">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPodiumCategory('all')}
+                      className={`px-3 py-1.5 rounded-xl text-[10px] font-extrabold transition cursor-pointer ${
+                        selectedPodiumCategory === 'all'
+                          ? 'bg-amber-500 text-slate-950 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                      }`}
+                    >
+                      🌟 Geral
+                    </button>
+                    {categories.map(cat => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setSelectedPodiumCategory(cat.id)}
+                        className={`px-3 py-1.5 rounded-xl text-[10px] font-extrabold transition cursor-pointer ${
+                          selectedPodiumCategory === cat.id
+                            ? 'bg-amber-500 text-slate-950 shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                        }`}
+                      >
+                        {cat.title.split('(')[0].trim()}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Podium Stage */}
+                  {podiumList.length > 0 ? (
+                    <div className="flex items-end justify-center gap-2.5 sm:gap-3 pt-6 pb-1 min-h-[200px]">
+                      {/* 2nd Place (Silver - Left) */}
+                      {podiumList[1] ? (
+                        <div className="flex flex-col items-center w-24 sm:w-28 shrink-0">
+                          <div className="text-center mb-2">
+                            <span className="text-[9px] font-black text-slate-500 uppercase tracking-wider block">2º Lugar</span>
+                            <div className="h-9 w-9 mx-auto rounded-full bg-slate-100 text-slate-800 font-black flex items-center justify-center border-2 border-slate-300 text-xs shadow-xs">
+                              {getPlayerInitials(podiumList[1].name)}
+                            </div>
+                            <p className="text-[11px] font-extrabold text-slate-800 truncate max-w-[90px] mt-1" title={podiumList[1].name}>
+                              {podiumList[1].name}
+                            </p>
+                            <span className="text-[9px] text-slate-600 font-bold bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full inline-block mt-0.5">
+                              {podiumList[1].votes} {podiumList[1].votes === 1 ? 'voto' : 'votos'}
+                            </span>
+                          </div>
+                          <div className="w-full bg-gradient-to-t from-slate-200 to-slate-100 h-20 rounded-t-2xl border-t-4 border-slate-300 flex items-center justify-center shadow-xs">
+                            <span className="text-xl font-black text-slate-600">2º</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="w-24 sm:w-28 opacity-30 text-center shrink-0">
+                          <div className="h-16 bg-slate-100 rounded-t-2xl border-t-2 border-slate-200 flex items-center justify-center text-[10px] text-slate-400 font-bold">
+                            2º Vazio
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 1st Place (Gold - Center) */}
+                      {podiumList[0] ? (
+                        <div className="flex flex-col items-center w-28 sm:w-32 shrink-0 -mt-3 relative z-10">
+                          <Crown className="h-5 w-5 text-amber-500 mb-1 animate-bounce" />
+                          <div className="text-center mb-2">
+                            <span className="text-[9px] font-black text-amber-600 uppercase tracking-wider block">1º Lugar 🏆</span>
+                            <div className="h-11 w-11 mx-auto rounded-full bg-gradient-to-tr from-amber-400 via-yellow-300 to-amber-500 text-slate-950 font-black flex items-center justify-center border-2 border-amber-300 text-xs shadow-md ring-4 ring-amber-400/20">
+                              {getPlayerInitials(podiumList[0].name)}
+                            </div>
+                            <p className="text-xs font-black text-slate-900 truncate max-w-[100px] mt-1" title={podiumList[0].name}>
+                              {podiumList[0].name}
+                            </p>
+                            <span className="text-[9px] text-slate-950 font-black bg-amber-400 px-2.5 py-0.5 rounded-full inline-block mt-0.5 shadow-2xs">
+                              {podiumList[0].votes} {podiumList[0].votes === 1 ? 'voto' : 'votos'}
+                            </span>
+                          </div>
+                          <div className="w-full bg-gradient-to-t from-amber-400 via-yellow-400 to-amber-300 h-28 rounded-t-2xl border-t-4 border-yellow-200 flex items-center justify-center shadow-md">
+                            <span className="text-2xl font-black text-slate-950">1º</span>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {/* 3rd Place (Bronze - Right) */}
+                      {podiumList[2] ? (
+                        <div className="flex flex-col items-center w-24 sm:w-28 shrink-0">
+                          <div className="text-center mb-2">
+                            <span className="text-[9px] font-black text-amber-700 uppercase tracking-wider block">3º Lugar</span>
+                            <div className="h-9 w-9 mx-auto rounded-full bg-amber-100 text-amber-900 font-black flex items-center justify-center border-2 border-amber-300 text-xs shadow-xs">
+                              {getPlayerInitials(podiumList[2].name)}
+                            </div>
+                            <p className="text-[11px] font-extrabold text-slate-800 truncate max-w-[90px] mt-1" title={podiumList[2].name}>
+                              {podiumList[2].name}
+                            </p>
+                            <span className="text-[9px] text-amber-800 font-bold bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full inline-block mt-0.5">
+                              {podiumList[2].votes} {podiumList[2].votes === 1 ? 'voto' : 'votos'}
+                            </span>
+                          </div>
+                          <div className="w-full bg-gradient-to-t from-amber-200 to-amber-100 h-16 rounded-t-2xl border-t-4 border-amber-300 flex items-center justify-center shadow-xs">
+                            <span className="text-lg font-black text-amber-900">3º</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="w-24 sm:w-28 opacity-30 text-center shrink-0">
+                          <div className="h-14 bg-slate-100 rounded-t-2xl border-t-2 border-slate-200 flex items-center justify-center text-[10px] text-slate-400 font-bold">
+                            3º Vazio
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-slate-500 text-xs font-medium bg-slate-50 rounded-2xl border border-slate-200/60">
+                      Nenhum voto computado para esta categoria ainda.
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Rewards Card */}
             <div className="w-full max-w-md bg-white border border-slate-200/90 p-4 rounded-2xl shadow-sm space-y-3">
               <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 flex items-center justify-center gap-1">
@@ -545,7 +786,7 @@ export default function PostGameAwards({ selectedBooking, onVoteSubmitted, onClo
                 <span className="text-[10px] font-bold text-slate-400 uppercase block">Resumo dos seus votos:</span>
                 {categories.map(cat => {
                   const chosenPlayerId = selectedPlayerPerCategory[cat.id];
-                  const chosenPlayer = eligibleNominees.find(p => p.id === chosenPlayerId || p.name === chosenPlayerId);
+                  const chosenPlayer = eligibleNominees.find(p => p.id === chosenPlayerId || p.name === chosenPlayerId) || allPlayers.find(p => p.id === chosenPlayerId || p.name === chosenPlayerId);
                   return (
                     <div key={cat.id} className="flex justify-between items-center text-xs py-1.5 px-3 bg-slate-50 rounded-lg border border-slate-200/60">
                       <span className="text-slate-600 font-medium truncate max-w-[150px]">{cat.title.split('(')[0]}</span>
@@ -571,9 +812,9 @@ export default function PostGameAwards({ selectedBooking, onVoteSubmitted, onClo
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex-1 py-3 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-slate-950 font-black rounded-xl text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-amber-500/20"
+                  className="py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  Ver Hall da Fama <ArrowRight className="h-4 w-4" />
+                  Fechar <ArrowRight className="h-4 w-4" />
                 </button>
               )}
             </div>

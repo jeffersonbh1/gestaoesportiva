@@ -1737,9 +1737,26 @@ export async function dbSaveAvaliacaoJogo(evalItem: Partial<AvaliacaoJogo> & { b
     dbEval.id = evalItem.id;
   }
 
+  // Delete previous vote for this evaluator on this question in this booking if changing votes
+  if (dbEval.agendamento_id && dbEval.avaliador_nome) {
+    try {
+      let delQuery = supabase
+        .from('avaliacao_jogo')
+        .delete()
+        .eq('agendamento_id', dbEval.agendamento_id)
+        .eq('avaliador_nome', dbEval.avaliador_nome);
+      if (dbEval.pergunta_id) {
+        delQuery = delQuery.eq('pergunta_id', dbEval.pergunta_id);
+      }
+      await delQuery;
+    } catch (e) {
+      console.warn('Aviso ao remover voto anterior:', e);
+    }
+  }
+
   const { data, error } = await supabase
     .from('avaliacao_jogo')
-    .upsert(dbEval)
+    .insert(dbEval)
     .select()
     .single();
 
