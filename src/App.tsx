@@ -945,6 +945,7 @@ export default function App() {
                 bookings={bookings}
                 courts={courts}
                 onUpdatePaymentStatus={handleUpdatePaymentStatus}
+                onDeleteBooking={handleDeleteBooking}
               />
             </motion.div>
           )}

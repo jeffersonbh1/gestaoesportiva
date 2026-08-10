@@ -14,7 +14,8 @@ import {
   Smartphone,
   Copy,
   Printer,
-  X
+  X,
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -22,9 +23,10 @@ interface PaymentHistoryProps {
   bookings: Booking[];
   courts: Court[];
   onUpdatePaymentStatus: (bookingId: string, status: PaymentStatus) => void;
+  onDeleteBooking?: (bookingId: string) => void;
 }
 
-export default function PaymentHistory({ bookings, courts, onUpdatePaymentStatus }: PaymentHistoryProps) {
+export default function PaymentHistory({ bookings, courts, onUpdatePaymentStatus, onDeleteBooking }: PaymentHistoryProps) {
   // Filters state
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'Todos' | 'Pago' | 'Pendente'>('Todos');
@@ -35,6 +37,9 @@ export default function PaymentHistory({ bookings, courts, onUpdatePaymentStatus
   const [selectedReceipt, setSelectedReceipt] = useState<Booking | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [printing, setPrinting] = useState(false);
+
+  // Delete confirmation state
+  const [bookingToDelete, setBookingToDelete] = useState<Booking | null>(null);
 
   // Helper date conversions
   const getTodayDate = () => '2026-07-07'; // Match static mock date base
@@ -204,7 +209,7 @@ export default function PaymentHistory({ bookings, courts, onUpdatePaymentStatus
                 <th className="py-4 px-4">Forma</th>
                 <th className="py-4 px-4">Valor</th>
                 <th className="py-4 px-4">Status</th>
-                <th className="py-4 px-6 text-right">Comprovante</th>
+                <th className="py-4 px-6 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
@@ -275,15 +280,28 @@ export default function PaymentHistory({ bookings, courts, onUpdatePaymentStatus
                         </button>
                       </td>
 
-                      {/* Comprovante */}
+                      {/* Ações: Comprovante e Excluir */}
                       <td className="py-4 px-6 text-right">
-                        <button
-                          id={`receipt-btn-${b.id}`}
-                          onClick={() => setSelectedReceipt(b)}
-                          className="p-1.5 bg-slate-50 hover:bg-slate-100 hover:text-blue-600 rounded-lg text-slate-400 transition inline-flex items-center gap-1 cursor-pointer text-xs font-bold"
-                        >
-                          <FileText className="h-4 w-4" /> Comprovante
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            id={`receipt-btn-${b.id}`}
+                            onClick={() => setSelectedReceipt(b)}
+                            className="p-1.5 bg-slate-50 hover:bg-slate-100 hover:text-blue-600 rounded-lg text-slate-400 transition inline-flex items-center gap-1 cursor-pointer text-xs font-bold"
+                            title="Ver Comprovante"
+                          >
+                            <FileText className="h-4 w-4" /> Comprovante
+                          </button>
+                          {onDeleteBooking && (
+                            <button
+                              id={`delete-btn-${b.id}`}
+                              onClick={() => setBookingToDelete(b)}
+                              className="p-1.5 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition inline-flex items-center cursor-pointer text-xs font-bold"
+                              title="Excluir Agendamento"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -414,9 +432,69 @@ export default function PaymentHistory({ bookings, courts, onUpdatePaymentStatus
                 <button
                   onClick={handlePrint}
                   className="px-3 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-bold transition flex items-center justify-center cursor-pointer"
+                  title="Imprimir Comprovante"
                 >
                   <Printer className="h-4 w-4" />
                   {printing ? '...' : ''}
+                </button>
+                {onDeleteBooking && (
+                  <button
+                    onClick={() => {
+                      const toDelete = selectedReceipt;
+                      setSelectedReceipt(null);
+                      setBookingToDelete(toDelete);
+                    }}
+                    className="px-3 py-2.5 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-bold transition flex items-center justify-center cursor-pointer"
+                    title="Excluir Agendamento"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Confirmação de Exclusão */}
+      <AnimatePresence>
+        {bookingToDelete && (
+          <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl p-6 shadow-xl border border-slate-200 max-w-sm w-full text-center space-y-4"
+            >
+              <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto border border-rose-100">
+                <Trash2 className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Excluir Agendamento</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Tem certeza que deseja excluir o agendamento de <strong className="text-slate-800">{bookingToDelete.customerName}</strong> ({bookingToDelete.date.split('-').reverse().join('/')} às {bookingToDelete.startTime})?
+                </p>
+                <p className="text-[11px] text-rose-600 font-semibold mt-2">Esta ação removerá o registro do sistema.</p>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setBookingToDelete(null)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onDeleteBooking) {
+                      onDeleteBooking(bookingToDelete.id);
+                    }
+                    setBookingToDelete(null);
+                  }}
+                  className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-200 transition cursor-pointer"
+                >
+                  Excluir
                 </button>
               </div>
             </motion.div>
