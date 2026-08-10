@@ -30,11 +30,46 @@ export default function CourtGrid({
   onViewBooking 
 }: CourtGridProps) {
 
-  // Current timeline highlight helper
+  // Current timeline highlight helper (using Brasília time zone America/Sao_Paulo)
   const isCurrentTimeSlot = (timeStr: string): boolean => {
-    const currentHour = 13; // Set to mock currentTime hour 13:54 from metadata
-    const slotHour = parseInt(timeStr.split(':')[0], 10);
-    return currentHour === slotHour;
+    try {
+      const now = new Date();
+
+      // Get current date in Brasilia timezone (YYYY-MM-DD)
+      const brasiliaDateParts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).formatToParts(now);
+
+      const year = brasiliaDateParts.find(p => p.type === 'year')?.value;
+      const month = brasiliaDateParts.find(p => p.type === 'month')?.value;
+      const day = brasiliaDateParts.find(p => p.type === 'day')?.value;
+      const brasiliaDateStr = `${year}-${month}-${day}`;
+
+      // Only highlight if selectedDate matches today in Brasilia timezone
+      if (selectedDate && selectedDate !== brasiliaDateStr) {
+        return false;
+      }
+
+      // Get current hour in Brasilia timezone
+      const brasiliaHourStr = new Intl.DateTimeFormat('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+        hour: '2-digit',
+        hour12: false
+      }).format(now);
+
+      const currentHour = parseInt(brasiliaHourStr, 10);
+      const slotHour = parseInt(timeStr.split(':')[0], 10);
+
+      return currentHour === slotHour;
+    } catch (e) {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const slotHour = parseInt(timeStr.split(':')[0], 10);
+      return currentHour === slotHour;
+    }
   };
 
   // Find a booking that falls into a specific court, date, and hour slot
@@ -201,8 +236,14 @@ export default function CourtGrid({
                             className={`p-2.5 rounded-xl cursor-pointer transition text-left flex flex-col justify-between h-14 ${activeStyle.card} relative group shadow-sm`}
                           >
                             <div className="flex justify-between items-center gap-1">
-                              <span className="text-xs font-bold font-mono tracking-tight" title={`Horário total: ${booking.startTime} às ${booking.endTime}`}>
+                              <span className="text-xs font-bold font-mono tracking-tight flex items-center gap-1" title={`Horário total: ${booking.startTime} às ${booking.endTime}`}>
                                 {time}
+                                {isCurrent && (
+                                  <span className="flex h-1.5 w-1.5 relative inline-block ml-0.5" title="Horário Atual (Ao Vivo)">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-300 opacity-90"></span>
+                                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cyan-200"></span>
+                                  </span>
+                                )}
                               </span>
                               <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${activeStyle.badge} truncate max-w-[95px]`}>
                                 {isMaintenance ? 'MANUTENÇÃO' : booking.sport}
