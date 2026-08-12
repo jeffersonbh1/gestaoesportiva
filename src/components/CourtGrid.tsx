@@ -1,6 +1,6 @@
 import React from 'react';
 import { Court, Booking } from '../types';
-import { TIME_SLOTS, formatCurrency, timeToMinutes } from '../utils';
+import { TIME_SLOTS, formatCurrency, timeToMinutes, getBrasiliaTodayDate, getBrasiliaCurrentHour } from '../utils';
 import { 
   Plus, 
   Wrench, 
@@ -32,44 +32,16 @@ export default function CourtGrid({
 
   // Current timeline highlight helper (using Brasília time zone America/Sao_Paulo)
   const isCurrentTimeSlot = (timeStr: string): boolean => {
-    try {
-      const now = new Date();
+    const brasiliaDateStr = getBrasiliaTodayDate();
 
-      // Get current date in Brasilia timezone (YYYY-MM-DD)
-      const brasiliaDateParts = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'America/Sao_Paulo',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).formatToParts(now);
-
-      const year = brasiliaDateParts.find(p => p.type === 'year')?.value;
-      const month = brasiliaDateParts.find(p => p.type === 'month')?.value;
-      const day = brasiliaDateParts.find(p => p.type === 'day')?.value;
-      const brasiliaDateStr = `${year}-${month}-${day}`;
-
-      // Only highlight if selectedDate matches today in Brasilia timezone
-      if (selectedDate && selectedDate !== brasiliaDateStr) {
-        return false;
-      }
-
-      // Get current hour in Brasilia timezone
-      const brasiliaHourStr = new Intl.DateTimeFormat('pt-BR', {
-        timeZone: 'America/Sao_Paulo',
-        hour: '2-digit',
-        hour12: false
-      }).format(now);
-
-      const currentHour = parseInt(brasiliaHourStr, 10);
-      const slotHour = parseInt(timeStr.split(':')[0], 10);
-
-      return currentHour === slotHour;
-    } catch (e) {
-      const now = new Date();
-      const currentHour = now.getHours();
-      const slotHour = parseInt(timeStr.split(':')[0], 10);
-      return currentHour === slotHour;
+    // Only highlight if selectedDate matches today in Brasilia timezone
+    if (selectedDate && selectedDate !== brasiliaDateStr) {
+      return false;
     }
+
+    const currentHour = getBrasiliaCurrentHour();
+    const slotHour = parseInt(timeStr.split(':')[0], 10);
+    return currentHour === slotHour;
   };
 
   // Find a booking that falls into a specific court, date, and hour slot

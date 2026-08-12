@@ -1,4 +1,5 @@
 import { Court, Booking, RentalType, Teacher, Student, Sport, CourtTypeItem } from '../types';
+import { getBrasiliaTodayDate, shiftDateString } from '../utils';
 
 export const INITIAL_SPORTS: Sport[] = [
   { id: 'sport-1', name: 'Vôlei de Areia', description: 'Vôlei praticado em quadras de areia', active: true },
@@ -49,11 +50,9 @@ export const INITIAL_COURTS: Court[] = [
   }
 ];
 
-// Helper to get formatted dates relative to today
+// Helper to get formatted dates relative to today in Brasília timezone
 const getRelativeDate = (offsetDays: number): string => {
-  const date = new Date('2026-07-07T12:00:00'); // Use standard baseline from context
-  date.setDate(date.getDate() + offsetDays);
-  return date.toISOString().split('T')[0];
+  return shiftDateString(getBrasiliaTodayDate(), offsetDays);
 };
 
 export const getInitialBookings = (): Booking[] => {

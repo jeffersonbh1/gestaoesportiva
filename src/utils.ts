@@ -1,5 +1,72 @@
 import { Booking } from './types';
 
+// Timezone constant for Brasil / Brasilia
+export const BRASILIA_TIMEZONE = 'America/Sao_Paulo';
+
+// Get current date string 'YYYY-MM-DD' in Brasilia timezone (UTC-3)
+export const getBrasiliaTodayDate = (): string => {
+  try {
+    const d = new Date();
+    const formatter = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: BRASILIA_TIMEZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const parts = formatter.formatToParts(d);
+    const day = parts.find(p => p.type === 'day')?.value;
+    const month = parts.find(p => p.type === 'month')?.value;
+    const year = parts.find(p => p.type === 'year')?.value;
+
+    if (year && month && day) {
+      return `${year}-${month}-${day}`;
+    }
+  } catch (e) {
+    // Fallback
+  }
+
+  // Fallback: calculate Brasilia local date (UTC-3) from current UTC timestamp
+  const now = new Date();
+  const brasiliaMs = now.getTime() - (3 * 60 * 60 * 1000);
+  const bDate = new Date(brasiliaMs);
+  const year = bDate.getUTCFullYear();
+  const month = String(bDate.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(bDate.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+// Get current hour (0-23) in Brasilia timezone
+export const getBrasiliaCurrentHour = (): number => {
+  try {
+    const hourStr = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: BRASILIA_TIMEZONE,
+      hour: '2-digit',
+      hour12: false
+    }).format(new Date());
+    const parsed = parseInt(hourStr, 10);
+    if (!isNaN(parsed)) return parsed;
+  } catch (e) {
+    // Fallback
+  }
+
+  const now = new Date();
+  const brasiliaMs = now.getTime() - (3 * 60 * 60 * 1000);
+  const bDate = new Date(brasiliaMs);
+  return bDate.getUTCHours();
+};
+
+// Shift a date string 'YYYY-MM-DD' by offsetDays safely without timezone skew
+export const shiftDateString = (dateStr: string, offsetDays: number): string => {
+  if (!dateStr) return dateStr;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const utcDate = new Date(Date.UTC(y, m - 1, d));
+  utcDate.setUTCDate(utcDate.getUTCDate() + offsetDays);
+  const year = utcDate.getUTCFullYear();
+  const month = String(utcDate.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(utcDate.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 // Format currency to BRL
 export const formatCurrency = (value: number): string => {
   return new Intl.NumberFormat('pt-BR', {

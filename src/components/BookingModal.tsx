@@ -320,6 +320,12 @@ export default function BookingModal({
           setDayUseUnitPrice(initPrice);
           setTotalValue(initPrice);
           setIsCustomPrice(true);
+        } else if (initType.toLowerCase().includes('aula')) {
+          setDayUseQuantity(1);
+          setDayUseUnitPrice(0);
+          setTotalValue(0);
+          setFormattedValue('0,00');
+          setIsCustomPrice(false);
         } else {
           setDayUseQuantity(1);
           setDayUseUnitPrice(0);
@@ -378,7 +384,7 @@ export default function BookingModal({
     const diffHours = (endMin - startMin) / 60;
 
     if (!isCustomPrice) {
-      if (bookingType === 'Manutenção') {
+      if (bookingType === 'Manutenção' || (bookingType || '').toLowerCase().includes('aula')) {
         setTotalValue(0);
       } else if (diffHours > 0) {
         setTotalValue(diffHours * selectedCourt.pricePerHour);
@@ -730,6 +736,16 @@ export default function BookingModal({
                       setDayUseUnitPrice(defaultUnit);
                       setTotalValue(qty * defaultUnit);
                       setIsCustomPrice(true);
+                    } else if (newType.toLowerCase().includes('aula')) {
+                      setTotalValue(0);
+                      setFormattedValue('0,00');
+                      setIsCustomPrice(false);
+                    } else if (newType === 'Manutenção') {
+                      setTotalValue(0);
+                      setFormattedValue('0,00');
+                      setIsCustomPrice(true);
+                    } else {
+                      setIsCustomPrice(false);
                     }
                   }}
                   className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-semibold text-slate-700 cursor-pointer"
@@ -1076,7 +1092,12 @@ export default function BookingModal({
               <div className="mt-3 pt-3 border-t border-slate-200 flex justify-between items-center gap-4">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-slate-700">Valor do Aluguel (R$):</span>
-                  {isCustomPrice && (
+                  {isClassBooking && (
+                    <span className="text-[10px] font-extrabold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                      Isento (Aula)
+                    </span>
+                  )}
+                  {isCustomPrice && !isClassBooking && (
                     <button
                       type="button"
                       onClick={() => {

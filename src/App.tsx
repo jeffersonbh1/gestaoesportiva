@@ -40,6 +40,7 @@ import AwardQuestionsManager, { INITIAL_AWARD_QUESTIONS } from './components/Awa
 import EvaluationModule from './components/EvaluationModule';
 import PublicEvaluationView from './components/PublicEvaluationView';
 import { AwardQuestion } from './types';
+import { getBrasiliaTodayDate, shiftDateString } from './utils';
 import { 
   Calendar, 
   LayoutDashboard, 
@@ -55,7 +56,9 @@ import {
   Shield,
   Trophy,
   HelpCircle,
-  Award
+  Award,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -147,16 +150,20 @@ export default function App() {
     localStorage.setItem('arena_award_questions', JSON.stringify(updated));
   };
 
-  // Data atual carregada por padrão ao entrar no sistema
-  const getTodayDate = () => {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
+  // Data atual carregada por padrão no fuso horário de Brasília (America/Sao_Paulo)
+  const getTodayDate = () => getBrasiliaTodayDate();
 
   const [selectedDate, setSelectedDate] = useState(getTodayDate);
+
+  const handlePrevDay = () => {
+    if (!selectedDate) return;
+    setSelectedDate(shiftDateString(selectedDate, -1));
+  };
+
+  const handleNextDay = () => {
+    if (!selectedDate) return;
+    setSelectedDate(shiftDateString(selectedDate, 1));
+  };
   const [activeTab, setActiveTab] = useState(() => {
     const savedUser = localStorage.getItem('arena_current_user');
     if (savedUser) {
@@ -698,16 +705,53 @@ export default function App() {
 
           {/* Date Selector sidebar controller */}
           <div className={`p-5 border-b border-slate-100 space-y-2 md:block ${mobileMenuOpen ? 'block' : 'hidden md:block'}`}>
-            <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
-              <Calendar className="h-3.5 w-3.5 text-blue-500" />
-              Visualizar Data
-            </label>
-            <input 
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-full bg-slate-50 text-slate-800 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
-            />
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5 text-blue-500" />
+                Visualizar Data
+              </label>
+              {selectedDate !== getTodayDate() ? (
+                <button
+                  type="button"
+                  onClick={() => setSelectedDate(getTodayDate())}
+                  className="text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md border border-blue-200 cursor-pointer transition"
+                  title="Ir para Hoje"
+                >
+                  Ir para hoje
+                </button>
+              ) : (
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                  Hoje
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handlePrevDay}
+                className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-slate-300 text-slate-600 hover:text-slate-900 rounded-xl transition cursor-pointer shrink-0"
+                title="Dia anterior"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+
+              <input 
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="w-full bg-slate-50 text-slate-800 border border-slate-200 rounded-xl px-2 py-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer text-center"
+              />
+
+              <button
+                type="button"
+                onClick={handleNextDay}
+                className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-slate-300 text-slate-600 hover:text-slate-900 rounded-xl transition cursor-pointer shrink-0"
+                title="Próximo dia"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           {/* Navigation Links */}

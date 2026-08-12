@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Booking, Court, PaymentStatus } from '../types';
-import { formatCurrency } from '../utils';
+import { formatCurrency, getBrasiliaTodayDate, shiftDateString } from '../utils';
 import { 
   Search, 
   Calendar, 
@@ -41,9 +41,9 @@ export default function PaymentHistory({ bookings, courts, onUpdatePaymentStatus
   // Delete confirmation state
   const [bookingToDelete, setBookingToDelete] = useState<Booking | null>(null);
 
-  // Helper date conversions
-  const getTodayDate = () => '2026-07-07'; // Match static mock date base
-  const getYesterdayDate = () => '2026-07-06';
+  // Helper date conversions (fuso horário de Brasília)
+  const getTodayDate = () => getBrasiliaTodayDate();
+  const getYesterdayDate = () => shiftDateString(getBrasiliaTodayDate(), -1);
 
   // Filter logic
   const filteredBookings = bookings.filter(b => {
