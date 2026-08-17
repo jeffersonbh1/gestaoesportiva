@@ -25,7 +25,14 @@ import {
   BarChart3, 
   History, 
   Volleyball, 
-  ArrowLeftRight
+  ArrowLeftRight,
+  UtensilsCrossed,
+  TrendingUp,
+  AlertCircle,
+  Menu,
+  X,
+  RefreshCw,
+  ChevronRight
 } from 'lucide-react';
 
 interface BarModuleProps {
@@ -450,11 +457,57 @@ export default function BarModule({
   };
 
   const openComandasCount = comandas.filter(c => c.status === 'Aberta').length;
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todaySalesCount = sales.filter(s => s.date === todayStr && s.status !== 'Cancelada').length;
+  const lowStockCount = products.filter(p => p.stock <= 5).length;
+
+  const barNavItems = [
+    {
+      id: 'comandas' as const,
+      label: 'Comandas de Consumo',
+      subtitle: 'Controle de mesas e cartões',
+      icon: Receipt,
+      count: openComandasCount,
+      badgeColor: 'bg-amber-500 text-white'
+    },
+    {
+      id: 'directSale' as const,
+      label: 'Venda Rápida / Balcão',
+      subtitle: 'PDV ágil sem abertura de comanda',
+      icon: Zap,
+      count: undefined,
+      badgeColor: ''
+    },
+    {
+      id: 'products' as const,
+      label: 'Cadastro de Produtos',
+      subtitle: 'Preços, categorias e cardápio',
+      icon: Package,
+      count: lowStockCount > 0 ? lowStockCount : undefined,
+      badgeColor: 'bg-red-500 text-white'
+    },
+    {
+      id: 'reports' as const,
+      label: 'Relatórios de Vendas',
+      subtitle: 'Histórico unificado e faturamento',
+      icon: BarChart3,
+      count: todaySalesCount > 0 ? todaySalesCount : undefined,
+      badgeColor: 'bg-emerald-600 text-white'
+    },
+    {
+      id: 'movements' as const,
+      label: 'Histórico de Estoque',
+      subtitle: 'Entradas, saídas e perdas',
+      icon: History,
+      count: undefined,
+      badgeColor: ''
+    }
+  ];
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Clean Modern Header Bar */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-2xs space-y-5">
+      {/* Top Header */}
+      <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-2xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -463,14 +516,14 @@ export default function BarModule({
               </span>
             </div>
             <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-              Gestão de Comandas
+              Gestão de Comandas & PDV
             </h1>
             <p className="text-xs text-slate-500 font-medium">
-              Abertura de comandas por cliente, consumo contínuo e fechamento de conta.
+              Controle de consumo, vendas rápidas no balcão, produtos e relatórios integrados.
             </p>
           </div>
 
-          {/* Module Switch Buttons */}
+          {/* Switch Module Actions */}
           <div className="flex items-center gap-2">
             <button
               onClick={onSwitchToQuadras}
@@ -490,83 +543,128 @@ export default function BarModule({
             </button>
           </div>
         </div>
-
-        {/* Bar Sub-Tabs Navigation */}
-        <div className="pt-3 border-t border-slate-100 flex items-center gap-2 overflow-x-auto scrollbar-thin">
-          {[
-            { id: 'comandas', label: `Comandas (${openComandasCount} abertas)`, icon: Receipt },
-            { id: 'directSale', label: 'Venda Rápida (Sem Comanda)', icon: Zap },
-            { id: 'products', label: 'Cadastro', icon: Package },
-            { id: 'reports', label: 'Relatórios de Vendas', icon: BarChart3 },
-            { id: 'movements', label: 'Histórico de Estoque', icon: History }
-          ].map(tab => {
-            const IconComp = tab.icon;
-            const isActive = activeBarTab === tab.id;
-
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveBarTab(tab.id as any)}
-                className={`px-4 py-2.5 rounded-2xl text-xs font-extrabold flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
-                  isActive
-                    ? 'bg-amber-500 text-white shadow-sm font-black'
-                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/60'
-                }`}
-              >
-                <IconComp className={`h-4 w-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
       </div>
 
-      {/* Bar Content Views */}
-      <div className="transition-all">
-        {activeBarTab === 'comandas' && (
-          <BarComandasManager
-            comandas={comandas}
-            products={products}
-            onOpenComanda={handleOpenComanda}
-            onAddItemToComanda={handleAddItemToComanda}
-            onRemoveItemFromComanda={handleRemoveItemFromComanda}
-            onCloseComanda={handleCloseComanda}
-            onCancelComanda={handleCancelComanda}
-            onSwitchToDirectSale={() => setActiveBarTab('directSale')}
-          />
-        )}
+      {/* Main Responsive Layout with Vertical Side Menu */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* VERTICAL SIDEBAR MENU */}
+        <aside className="col-span-1 lg:col-span-3 space-y-3">
+          <div className="bg-white rounded-3xl p-4 border border-slate-200/80 shadow-2xs space-y-2">
+            <div className="px-3 py-2 border-b border-slate-100">
+              <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
+                Menu do Bar
+              </p>
+            </div>
 
-        {activeBarTab === 'directSale' && (
-          <BarDirectSaleManager
-            products={products}
-            sales={sales}
-            onDirectSale={handleDirectSale}
-            onCancelSale={handleCancelSale}
-          />
-        )}
+            <nav className="space-y-1.5" aria-label="Menu Lateral do Bar">
+              {barNavItems.map(item => {
+                const IconComp = item.icon;
+                const isActive = activeBarTab === item.id;
 
-        {activeBarTab === 'products' && (
-          <BarProductsManager
-            products={products}
-            onSaveProduct={handleSaveProduct}
-            onDeleteProduct={handleDeleteProduct}
-            onAdjustStock={handleAdjustStock}
-          />
-        )}
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveBarTab(item.id)}
+                    className={`w-full group flex items-center justify-between p-3 rounded-2xl text-left transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-slate-900 text-white shadow-md shadow-slate-900/10'
+                        : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent hover:border-slate-200/60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`p-2.5 rounded-xl transition ${
+                        isActive
+                          ? 'bg-amber-500 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200 group-hover:text-slate-800'
+                      }`}>
+                        <IconComp className="h-4 w-4 shrink-0" />
+                      </div>
+                      <div className="truncate">
+                        <p className={`text-xs font-extrabold truncate ${isActive ? 'text-white' : 'text-slate-800'}`}>
+                          {item.label}
+                        </p>
+                        <p className={`text-[10px] truncate font-medium ${isActive ? 'text-slate-300' : 'text-slate-400'}`}>
+                          {item.subtitle}
+                        </p>
+                      </div>
+                    </div>
 
-        {activeBarTab === 'reports' && (
-          <BarSalesReports
-            sales={sales}
-            products={products}
-            onCancelSale={handleCancelSale}
-          />
-        )}
+                    {item.count !== undefined && item.count > 0 && (
+                      <span className={`shrink-0 ml-2 px-2 py-0.5 rounded-full text-[10px] font-black ${
+                        isActive ? 'bg-amber-500 text-white' : item.badgeColor
+                      }`}>
+                        {item.count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
 
-        {activeBarTab === 'movements' && (
-          <BarStockMovements
-            movements={movements}
-          />
-        )}
+            {/* Quick Summary Card inside Vertical Menu */}
+            <div className="mt-4 pt-3 border-t border-slate-100 space-y-2">
+              <div className="bg-amber-50 border border-amber-200/60 p-3 rounded-2xl flex items-center justify-between text-amber-950">
+                <div className="space-y-0.5">
+                  <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Comandas Abertas</p>
+                  <p className="text-base font-black text-amber-900">{openComandasCount}</p>
+                </div>
+                <div className="p-2 bg-amber-500 text-white rounded-xl">
+                  <Receipt className="h-4 w-4" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* MAIN VIEW CONTENT AREA */}
+        <main className="col-span-1 lg:col-span-9">
+          <div className="transition-all">
+            {activeBarTab === 'comandas' && (
+              <BarComandasManager
+                comandas={comandas}
+                products={products}
+                onOpenComanda={handleOpenComanda}
+                onAddItemToComanda={handleAddItemToComanda}
+                onRemoveItemFromComanda={handleRemoveItemFromComanda}
+                onCloseComanda={handleCloseComanda}
+                onCancelComanda={handleCancelComanda}
+                onSwitchToDirectSale={() => setActiveBarTab('directSale')}
+              />
+            )}
+
+            {activeBarTab === 'directSale' && (
+              <BarDirectSaleManager
+                products={products}
+                sales={sales}
+                onDirectSale={handleDirectSale}
+                onCancelSale={handleCancelSale}
+              />
+            )}
+
+            {activeBarTab === 'products' && (
+              <BarProductsManager
+                products={products}
+                onSaveProduct={handleSaveProduct}
+                onDeleteProduct={handleDeleteProduct}
+                onAdjustStock={handleAdjustStock}
+              />
+            )}
+
+            {activeBarTab === 'reports' && (
+              <BarSalesReports
+                sales={sales}
+                products={products}
+                onCancelSale={handleCancelSale}
+              />
+            )}
+
+            {activeBarTab === 'movements' && (
+              <BarStockMovements
+                movements={movements}
+              />
+            )}
+          </div>
+        </main>
       </div>
     </div>
   );
