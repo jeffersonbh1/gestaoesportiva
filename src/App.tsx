@@ -39,6 +39,8 @@ import UserManager from './components/UserManager';
 import AwardQuestionsManager, { INITIAL_AWARD_QUESTIONS } from './components/AwardQuestionsManager';
 import EvaluationModule from './components/EvaluationModule';
 import PublicEvaluationView from './components/PublicEvaluationView';
+import ModuleHub from './components/ModuleHub';
+import BarModule from './components/bar/BarModule';
 import { AwardQuestion } from './types';
 import { getBrasiliaTodayDate, shiftDateString } from './utils';
 import { 
@@ -58,7 +60,9 @@ import {
   HelpCircle,
   Award,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  UtensilsCrossed,
+  ArrowLeftRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -164,6 +168,15 @@ export default function App() {
     if (!selectedDate) return;
     setSelectedDate(shiftDateString(selectedDate, 1));
   };
+  const [activeModule, setActiveModule] = useState<'hub' | 'quadras' | 'bar'>(() => {
+    const saved = localStorage.getItem('arena_active_module');
+    return (saved as any) || 'hub';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('arena_active_module', activeModule);
+  }, [activeModule]);
+
   const [activeTab, setActiveTab] = useState(() => {
     const savedUser = localStorage.getItem('arena_current_user');
     if (savedUser) {
@@ -673,6 +686,72 @@ export default function App() {
     return <Login onLogin={setCurrentUser} users={users} />;
   }
 
+  // 0. Module Hub View (Selection Screen)
+  if (activeModule === 'hub') {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col justify-between antialiased font-sans text-slate-900">
+        <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center text-white shadow-md shadow-blue-200">
+              <Volleyball className="h-5 w-5 animate-spin-slow" />
+            </div>
+            <div>
+              <h1 className="text-sm font-black tracking-tight text-slate-800 leading-tight">
+                Arena Fahel Beach
+              </h1>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Sistema de Gestão</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200/60">
+              <div className="w-6 h-6 rounded-full bg-blue-500 text-white font-bold flex items-center justify-center text-xs">
+                {currentUser.name.charAt(0)}
+              </div>
+              <span className="text-xs font-bold text-slate-800">{currentUser.name}</span>
+              <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                {currentUser.role}
+              </span>
+            </div>
+
+            <button
+              onClick={() => {
+                setCurrentUser(null);
+                setActiveTab('dashboard');
+              }}
+              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+              title="Sair da Conta"
+            >
+              <LogOut className="h-5 w-5" />
+            </button>
+          </div>
+        </header>
+
+        <ModuleHub 
+          onSelectQuadras={() => setActiveModule('quadras')} 
+          onSelectBar={() => setActiveModule('bar')} 
+        />
+
+        <footer className="bg-white border-t border-slate-200 py-3 text-center text-xs text-slate-400 font-medium">
+          Arena Fahel Beach © 2026 • Módulo Esportivo & Gestão de Bar
+        </footer>
+      </div>
+    );
+  }
+
+  // 0. Bar Management Module View
+  if (activeModule === 'bar') {
+    return (
+      <div className="min-h-screen bg-slate-50 antialiased font-sans text-slate-900 p-4 md:p-8 max-w-7xl mx-auto">
+        <BarModule 
+          currentUser={currentUser} 
+          onSwitchToQuadras={() => setActiveModule('quadras')} 
+          onSwitchModuleHub={() => setActiveModule('hub')} 
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row antialiased font-sans text-slate-900">
       
@@ -699,6 +778,28 @@ export default function App() {
               className="p-1.5 hover:bg-slate-50 rounded-lg md:hidden text-slate-400 cursor-pointer"
             >
               {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
+          </div>
+
+          {/* Module Switch Quick Banner in Sidebar */}
+          <div className="p-3 border-b border-slate-100 bg-amber-50/60 space-y-1.5">
+            <button
+              onClick={() => setActiveModule('bar')}
+              className="w-full flex items-center justify-between px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold transition shadow-sm cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <UtensilsCrossed className="h-4 w-4" />
+                <span>Gerenciar Bar</span>
+              </div>
+              <ChevronRight className="h-4 w-4 opacity-80" />
+            </button>
+
+            <button
+              onClick={() => setActiveModule('hub')}
+              className="w-full text-center text-[10px] font-bold text-slate-500 hover:text-slate-800 py-1 transition flex items-center justify-center gap-1 cursor-pointer"
+            >
+              <ArrowLeftRight className="h-3 w-3" />
+              Mudar Módulo do Sistema
             </button>
           </div>
 

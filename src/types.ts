@@ -176,3 +176,89 @@ export interface AvaliacaoJogo {
   createdAt?: string;
 }
 
+// ================= Bar Module Types =================
+export type BarCategory = 'Bebidas' | 'Petiscos' | 'Espetinhos' | 'Sanduíches' | 'Outros';
+
+export interface BarProduct {
+  id: string;
+  name: string;
+  category: BarCategory | string;
+  price: number;
+  costPrice: number;
+  stock: number;
+  minStock: number;
+  unit: 'un' | 'porção' | 'kg' | string;
+  description?: string;
+  active: boolean;
+  imageUrl?: string;
+}
+
+export interface BarSaleItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  addedAt?: string;
+}
+
+export interface BarComandaItem {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  addedAt: string;
+}
+
+export interface BarComanda {
+  id: string;
+  code: string;
+  customerName: string;
+  customerPhone: string;
+  location?: string; // ex: 'Mesa 04', 'Quadra 1', 'Balcão'
+  items: BarComandaItem[];
+  status: 'Aberta' | 'Fechada' | 'Cancelada';
+  openedAt: string;
+  closedAt?: string;
+  date: string; // YYYY-MM-DD
+  discount: number;
+  totalAmount: number;
+  finalAmount: number;
+  paymentMethod?: PaymentMethod | string;
+  notes?: string;
+  origemVenda?: 'comanda' | 'balcão';
+}
+
+export interface BarSale {
+  id: string;
+  code: string;
+  comandaId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  location?: string; // ex: 'Quadra 1', 'Mesa 2', 'Balcão'
+  items: BarSaleItem[];
+  totalAmount: number;
+  discount: number;
+  finalAmount: number;
+  paymentMethod: PaymentMethod | 'Fiado / Comanda';
+  paymentStatus: PaymentStatus;
+  status: 'Concluída' | 'Cancelada';
+  createdAt: string; // ISO or formatted date
+  date: string; // YYYY-MM-DD
+  notes?: string;
+  origemVenda?: 'comanda' | 'balcão';
+}
+
+export interface StockMovement {
+  id: string;
+  productId: string;
+  productName: string;
+  type: 'Entrada' | 'Saída (Venda)' | 'Ajuste / Perda' | 'Cancelamento Venda';
+  quantity: number;
+  reason: string;
+  createdAt: string;
+  user?: string;
+}
+

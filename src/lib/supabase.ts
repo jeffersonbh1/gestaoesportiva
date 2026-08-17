@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
-import { Court, Booking, BookingStudent, User, Player, PlayerRating, Sport, CourtTypeItem, RentalType, Teacher, Student, Team, TeamMember, AwardQuestion, Torcedor, AvaliacaoJogo } from '../types';
+import { Court, Booking, BookingStudent, User, Player, PlayerRating, Sport, CourtTypeItem, RentalType, Teacher, Student, Team, TeamMember, AwardQuestion, Torcedor, AvaliacaoJogo, BarProduct, BarComanda, BarComandaItem, BarSale, BarSaleItem, StockMovement } from '../types';
 import { INITIAL_TEACHERS, INITIAL_STUDENTS, INITIAL_COURT_TYPES, INITIAL_RENTAL_TYPES } from '../data/mockData';
+import { INITIAL_BAR_PRODUCTS } from '../data/mockBarData';
 
 const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
 const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
@@ -1781,6 +1782,618 @@ export async function dbSaveAvaliacaoJogo(evalItem: Partial<AvaliacaoJogo> & { b
 }
 
 // ====================================================================
+// BAR & GESTÃO DE VENDAS / PRODUTOS / COMANDAS / ESTOQUE
+// ====================================================================
+
+export async function dbGetBarProducts(): Promise<BarProduct[]> {
+  if (!supabase) return INITIAL_BAR_PRODUCTS;
+  try {
+    const { data, error } = await supabase
+      .from('produtos_bar')
+      .select('*')
+      .order('nome', { ascending: true });
+
+    if (error) {
+      console.error('Erro ao buscar produtos do bar no Supabase:', error);
+      return INITIAL_BAR_PRODUCTS;
+    }
+
+    if (!data || data.length === 0) {
+      try {
+        const toInsert = INITIAL_BAR_PRODUCTS.map(p => ({
+          id: p.id,
+          nome: p.name,
+          categoria: p.category,
+          preco: Number(p.price) || 0,
+          preco_custo: Number(p.costPrice) || 0,
+          estoque: Number(p.stock) || 0,
+          estoque_minimo: Number(p.minStock) || 5,
+          unidade: p.unit || 'un',
+          descricao: p.description || null,
+          ativo: p.active ?? true,
+          url_imagem: p.imageUrl || null
+        }));
+        await supabase.from('produtos_bar').insert(toInsert);
+
+        const { data: reData } = await supabase
+          .from('produtos_bar')
+          .select('*')
+          .order('nome', { ascending: true });
+
+        if (reData && reData.length > 0) {
+          return reData.map(p => ({
+            id: p.id,
+            name: p.nome,
+            category: p.categoria,
+            price: Number(p.preco) || 0,
+            costPrice: Number(p.preco_custo) || 0,
+            stock: Number(p.estoque) || 0,
+            minStock: Number(p.estoque_minimo) || 5,
+            unit: p.unidade || 'un',
+            description: p.descricao || undefined,
+            active: p.ativo ?? true,
+            imageUrl: p.url_imagem || undefined
+          }));
+        }
+      } catch (insErr) {
+        console.warn('Aviso ao inicializar produtos no banco:', insErr);
+      }
+      return INITIAL_BAR_PRODUCTS;
+    }
+
+    return data.map(p => ({
+      id: p.id,
+      name: p.nome,
+      category: p.categoria,
+      price: Number(p.preco) || 0,
+      costPrice: Number(p.preco_custo) || 0,
+      stock: Number(p.estoque) || 0,
+      minStock: Number(p.estoque_minimo) || 5,
+      unit: p.unidade || 'un',
+      description: p.descricao || undefined,
+      active: p.ativo ?? true,
+      imageUrl: p.url_imagem || undefined
+    }));
+  } catch (err) {
+    console.warn('Erro ao carregar produtos no Supabase:', err);
+    return INITIAL_BAR_PRODUCTS;
+  }
+}
+
+export async function dbSaveBarProduct(product: BarProduct): Promise<BarProduct | null> {
+  if (!supabase) return null;
+
+  const dbProduct: any = {
+    id: product.id,
+    nome: product.name,
+    categoria: product.category,
+    preco: Number(product.price) || 0,
+    preco_custo: Number(product.costPrice) || 0,
+    estoque: Number(product.stock) || 0,
+    estoque_minimo: Number(product.minStock) || 5,
+    unidade: product.unit || 'un',
+    descricao: product.description || null,
+    ativo: product.active ?? true,
+    url_imagem: product.imageUrl || null,
+    atualizado_em: new Date().toISOString()
+  };
+
+  const { data, error } = await supabase
+    .from('produtos_bar')
+    .upsert(dbProduct)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Erro ao salvar produto do bar no Supabase:', error);
+    throw error;
+  }
+
+  if (data) {
+    return {
+      id: data.id,
+      name: data.nome,
+      category: data.categoria,
+      price: Number(data.preco) || 0,
+      costPrice: Number(data.preco_custo) || 0,
+      stock: Number(data.estoque) || 0,
+      minStock: Number(data.estoque_minimo) || 5,
+      unit: data.unidade || 'un',
+      description: data.descricao || undefined,
+      active: data.ativo ?? true,
+      imageUrl: data.url_imagem || undefined
+    };
+  }
+
+  return null;
+}
+
+export async function dbDeleteBarProduct(productId: string): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const { error } = await supabase
+      .from('produtos_bar')
+      .delete()
+      .eq('id', productId);
+    if (error) {
+      console.error('Erro ao excluir produto do bar:', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Erro ao excluir produto do bar:', err);
+    return false;
+  }
+}
+
+export async function dbGetBarComandas(): Promise<BarComanda[]> {
+  if (!supabase) return [];
+  try {
+    // Try vendas_bar first, fallback to comandas_bar
+    let cData: any = null;
+    let cError: any = null;
+
+    const resVendas = await supabase
+      .from('vendas_bar')
+      .select('*')
+      .order('aberto_em', { ascending: false });
+
+    if (!resVendas.error && resVendas.data) {
+      cData = resVendas.data;
+    } else {
+      const resComandas = await supabase
+        .from('comandas_bar')
+        .select('*')
+        .order('aberto_em', { ascending: false });
+      cData = resComandas.data;
+      cError = resComandas.error;
+    }
+
+    if (cError) {
+      console.error('Erro ao buscar comandas/vendas do bar no Supabase:', cError);
+      return [];
+    }
+
+    if (!cData || cData.length === 0) return [];
+
+    // Try itens_vendas_bar first, fallback to itens_comanda_bar
+    let iData: any[] = [];
+    const resItensVendas = await supabase.from('itens_vendas_bar').select('*');
+    if (!resItensVendas.error && resItensVendas.data) {
+      iData = resItensVendas.data;
+    } else {
+      const resItensComanda = await supabase.from('itens_comanda_bar').select('*');
+      if (resItensComanda.data) iData = resItensComanda.data;
+    }
+
+    const itemsMap: Record<string, BarComandaItem[]> = {};
+    (iData || []).forEach(item => {
+      const parentId = item.vendas_id || item.venda_id || item.comanda_id;
+      if (!parentId) return;
+
+      if (!itemsMap[parentId]) {
+        itemsMap[parentId] = [];
+      }
+      itemsMap[parentId].push({
+        id: item.id,
+        productId: item.produto_id,
+        productName: item.nome_produto,
+        quantity: Number(item.quantidade) || 1,
+        unitPrice: Number(item.preco_unitario) || 0,
+        totalPrice: Number(item.preco_total) || 0,
+        addedAt: item.adicionado_em || new Date().toISOString()
+      });
+    });
+
+    return cData.map((c: any) => ({
+      id: c.id,
+      code: c.codigo,
+      customerName: c.nome_cliente,
+      customerPhone: c.telefone_cliente || '',
+      location: c.localizacao || 'Balcão',
+      status: c.status || 'Aberta',
+      openedAt: c.aberto_em || c.criado_em,
+      closedAt: c.fechado_em || undefined,
+      date: c.data,
+      items: itemsMap[c.id] || [],
+      totalAmount: Number(c.valor_total) || 0,
+      discount: Number(c.desconto) || 0,
+      finalAmount: Number(c.valor_final) || 0,
+      paymentMethod: c.forma_pagamento || undefined,
+      notes: c.observacoes || undefined,
+      origemVenda: c.origem_venda || 'comanda'
+    }));
+  } catch (err) {
+    console.warn('Erro ao buscar comandas no Supabase:', err);
+    return [];
+  }
+}
+
+function formatTimestampForDb(dateStr?: string, timeOrIsoStr?: string): string {
+  if (!timeOrIsoStr) return new Date().toISOString();
+  const trimmed = timeOrIsoStr.trim();
+  if (trimmed.includes('-') || trimmed.includes('T')) {
+    return trimmed;
+  }
+  if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(trimmed)) {
+    const validDate = dateStr && dateStr.includes('-') ? dateStr : new Date().toISOString().split('T')[0];
+    const timeWithSeconds = trimmed.length === 5 ? `${trimmed}:00` : trimmed;
+    return `${validDate} ${timeWithSeconds}`;
+  }
+  return new Date().toISOString();
+}
+
+export async function dbSaveBarComanda(comanda: BarComanda): Promise<BarComanda | null> {
+  if (!supabase) return null;
+
+  const dbComanda: any = {
+    id: comanda.id,
+    codigo: comanda.code,
+    nome_cliente: comanda.customerName,
+    telefone_cliente: comanda.customerPhone || null,
+    localizacao: comanda.location || 'Balcão',
+    status: comanda.status,
+    aberto_em: formatTimestampForDb(comanda.date, comanda.openedAt),
+    fechado_em: comanda.closedAt ? formatTimestampForDb(comanda.date, comanda.closedAt) : null,
+    data: comanda.date,
+    valor_total: Number(comanda.totalAmount) || 0,
+    desconto: Number(comanda.discount) || 0,
+    valor_final: Number(comanda.finalAmount) || 0,
+    forma_pagamento: comanda.paymentMethod || null,
+    observacoes: comanda.notes || null,
+    origem_venda: comanda.origemVenda || 'comanda'
+  };
+
+  // Try saving to vendas_bar first, fallback to comandas_bar
+  let targetTable = 'vendas_bar';
+  let { data: savedComanda, error: cErr } = await supabase
+    .from('vendas_bar')
+    .upsert(dbComanda)
+    .select()
+    .single();
+
+  if (cErr) {
+    targetTable = 'comandas_bar';
+    const retry = await supabase
+      .from('comandas_bar')
+      .upsert(dbComanda)
+      .select()
+      .single();
+    savedComanda = retry.data;
+    cErr = retry.error;
+  }
+
+  if (cErr || !savedComanda) {
+    console.error('Erro ao salvar comanda/venda no Supabase:', cErr);
+    throw cErr;
+  }
+
+  const comandaId = savedComanda.id;
+  const itemsTable = targetTable === 'vendas_bar' ? 'itens_vendas_bar' : 'itens_comanda_bar';
+
+  try {
+    // Try deleting old items
+    const delRes = await supabase.from(itemsTable).delete().eq('vendas_id', comandaId);
+    if (delRes.error) {
+      await supabase.from(itemsTable).delete().eq('comanda_id', comandaId);
+    }
+
+    if (comanda.items && comanda.items.length > 0) {
+      // Garantir que os produtos do consumo existam na tabela produtos_bar para não violar Foreign Key
+      for (const item of comanda.items) {
+        if (item.productId) {
+          const { data: existingProd } = await supabase
+            .from('produtos_bar')
+            .select('id')
+            .eq('id', item.productId)
+            .maybeSingle();
+
+          if (!existingProd) {
+            await supabase.from('produtos_bar').upsert({
+              id: item.productId,
+              nome: item.productName || 'Produto',
+              categoria: 'Geral',
+              preco: Number(item.unitPrice) || 0,
+              preco_custo: 0,
+              estoque: 100,
+              estoque_minimo: 5,
+              unidade: 'un',
+              ativo: true
+            });
+          }
+        }
+      }
+
+      const dbItems = comanda.items.map(item => ({
+        id: item.id || `ci-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        vendas_id: comandaId,
+        comanda_id: comandaId,
+        produto_id: item.productId,
+        nome_produto: item.productName,
+        quantidade: Number(item.quantity) || 1,
+        preco_unitario: Number(item.unitPrice) || 0,
+        preco_total: Number(item.totalPrice) || 0,
+        adicionado_em: formatTimestampForDb(comanda.date, item.addedAt)
+      }));
+
+      // Try inserting with vendas_id first
+      let { error: itemErr } = await supabase.from(itemsTable).insert(
+        dbItems.map(({ comanda_id, ...rest }) => rest)
+      );
+
+      if (itemErr) {
+        // Fallback to inserting with comanda_id
+        const fallbackItems = dbItems.map(({ vendas_id, ...rest }) => rest);
+        const { error: fallbackErr } = await supabase.from(itemsTable).insert(fallbackItems);
+        if (fallbackErr) {
+          console.error('Erro ao inserir itens:', fallbackErr);
+        }
+      }
+    }
+  } catch (iErr) {
+    console.error('Erro ao salvar itens da comanda:', iErr);
+  }
+
+  return comanda;
+}
+
+export async function dbGetBarSales(): Promise<BarSale[]> {
+  if (!supabase) return [];
+  try {
+    const { data: sData, error: sError } = await supabase
+      .from('vendas_bar')
+      .select('*')
+      .order('criado_em', { ascending: false });
+
+    if (sError) {
+      console.error('Erro ao buscar vendas do bar:', sError);
+      return [];
+    }
+
+    if (!sData || sData.length === 0) return [];
+
+    let iData: any[] = [];
+    const resItensVendas = await supabase.from('itens_vendas_bar').select('*');
+    if (!resItensVendas.error && resItensVendas.data) {
+      iData = resItensVendas.data;
+    } else {
+      const resItensVenda = await supabase.from('itens_venda_bar').select('*');
+      if (resItensVenda.data) iData = resItensVenda.data;
+    }
+
+    const itemsMap: Record<string, BarSaleItem[]> = {};
+    (iData || []).forEach(item => {
+      const parentId = item.vendas_id || item.venda_id || item.comanda_id;
+      if (!parentId) return;
+
+      if (!itemsMap[parentId]) {
+        itemsMap[parentId] = [];
+      }
+      itemsMap[parentId].push({
+        productId: item.produto_id,
+        productName: item.nome_produto,
+        quantity: Number(item.quantidade) || 1,
+        unitPrice: Number(item.preco_unitario) || 0,
+        totalPrice: Number(item.preco_total) || 0,
+        addedAt: item.adicionado_em || undefined
+      });
+    });
+
+    return sData.map((s: any) => ({
+      id: s.id,
+      code: s.codigo,
+      comandaId: s.comanda_id || undefined,
+      customerName: s.nome_cliente || 'Cliente',
+      customerPhone: s.telefone_cliente || undefined,
+      location: s.localizacao || 'Balcão',
+      items: itemsMap[s.id] || [],
+      totalAmount: Number(s.valor_total) || 0,
+      discount: Number(s.desconto) || 0,
+      finalAmount: Number(s.valor_final) || 0,
+      paymentMethod: s.forma_pagamento || 'Pix',
+      paymentStatus: s.status_pagamento || 'Pago',
+      status: s.status || 'Concluída',
+      createdAt: s.criado_em || s.aberto_em,
+      date: s.data,
+      notes: s.observacoes || undefined,
+      origemVenda: s.origem_venda || (s.comanda_id ? 'comanda' : 'balcão')
+    }));
+  } catch (err) {
+    console.warn('Erro ao buscar vendas no Supabase:', err);
+    return [];
+  }
+}
+
+export async function dbSaveBarSale(sale: BarSale): Promise<BarSale | null> {
+  if (!supabase) return null;
+
+  // 1. PRIMEIRO: REGISTRA O CABEÇALHO NA TABELA 'vendas_bar'
+  const dbSale: any = {
+    id: sale.id,
+    codigo: sale.code,
+    comanda_id: sale.comandaId || null,
+    nome_cliente: sale.customerName || 'Cliente',
+    telefone_cliente: sale.customerPhone || null,
+    localizacao: sale.location || 'Balcão',
+    valor_total: Number(sale.totalAmount) || 0,
+    desconto: Number(sale.discount) || 0,
+    valor_final: Number(sale.finalAmount) || 0,
+    forma_pagamento: sale.paymentMethod || 'Pix',
+    status_pagamento: sale.paymentStatus || 'Pago',
+    status: sale.status || 'Concluída',
+    criado_em: formatTimestampForDb(sale.date, sale.createdAt),
+    aberto_em: formatTimestampForDb(sale.date, sale.createdAt),
+    fechado_em: formatTimestampForDb(sale.date, sale.createdAt),
+    data: sale.date || new Date().toISOString().split('T')[0],
+    observacoes: sale.notes || null,
+    origem_venda: sale.origemVenda || (sale.comandaId ? 'comanda' : 'balcão')
+  };
+
+  const { data: savedSale, error: sErr } = await supabase
+    .from('vendas_bar')
+    .upsert(dbSale)
+    .select()
+    .single();
+
+  if (sErr || !savedSale) {
+    console.error('Erro ao salvar cabeçalho da venda na tabela vendas_bar:', sErr);
+    throw sErr;
+  }
+
+  const saleId = savedSale.id;
+
+  // 2. SEGUNDO: REGISTRA OS ITENS NA TABELA 'itens_vendas_bar'
+  try {
+    // 2.1 Remove itens anteriores para evitar duplicatas em caso de update
+    const del1 = await supabase.from('itens_vendas_bar').delete().eq('vendas_id', saleId);
+    if (del1.error) {
+      await supabase.from('itens_venda_bar').delete().eq('venda_id', saleId);
+    }
+
+    // 2.2 Se a venda possui itens, processa a inserção
+    if (sale.items && sale.items.length > 0) {
+      // Garante que produtos com productId existam no catálogo para não violar Foreign Key
+      const verifiedItems = [];
+      for (const item of sale.items) {
+        let validProductId: string | null = null;
+        if (item.productId) {
+          const { data: existingProd } = await supabase
+            .from('produtos_bar')
+            .select('id')
+            .eq('id', item.productId)
+            .maybeSingle();
+
+          if (existingProd) {
+            validProductId = existingProd.id;
+          } else {
+            // Tenta cadastrar produto placeholder ou usa null
+            const { error: upsertErr } = await supabase.from('produtos_bar').upsert({
+              id: item.productId,
+              nome: item.productName || 'Produto',
+              categoria: 'Geral',
+              preco: Number(item.unitPrice) || 0,
+              preco_custo: 0,
+              estoque: 100,
+              estoque_minimo: 5,
+              unidade: 'un',
+              ativo: true
+            });
+            validProductId = upsertErr ? null : item.productId;
+          }
+        }
+
+        const itemId = (item as any).id || `item-vd-${saleId.slice(-6)}-${Math.random().toString(36).substring(2, 8)}`;
+        const unitPrice = Number(item.unitPrice) || 0;
+        const qty = Number(item.quantity) || 1;
+        const totalPrice = Number(item.totalPrice) || (qty * unitPrice);
+
+        verifiedItems.push({
+          id: itemId,
+          vendas_id: saleId,
+          comanda_id: sale.comandaId || saleId,
+          venda_id: saleId,
+          produto_id: validProductId,
+          nome_produto: item.productName || 'Produto',
+          quantidade: qty,
+          preco_unitario: unitPrice,
+          preco_total: totalPrice,
+          adicionado_em: formatTimestampForDb(sale.date, item.addedAt || sale.createdAt)
+        });
+      }
+
+      // Tenta inserir na tabela 'itens_vendas_bar' (com vendas_id)
+      const { error: insErr } = await supabase.from('itens_vendas_bar').insert(
+        verifiedItems.map(({ venda_id, comanda_id, ...rest }) => rest)
+      );
+
+      if (insErr) {
+        console.warn('Tentando fallback para inserir itens_vendas_bar:', insErr.message);
+        // Fallback: tenta inserir com venda_id ou comanda_id caso a tabela tenha sido criada com outra nomenclatura
+        const fallback1 = await supabase.from('itens_venda_bar').insert(
+          verifiedItems.map(({ vendas_id, comanda_id, ...rest }) => rest)
+        );
+        if (fallback1.error) {
+          // Último recurso: inserir sem produto_id caso tenha havido restrição de chave estrangeira
+          await supabase.from('itens_vendas_bar').insert(
+            verifiedItems.map(({ venda_id, comanda_id, produto_id, ...rest }) => ({
+              ...rest,
+              produto_id: null
+            }))
+          );
+        }
+      }
+    }
+  } catch (iErr) {
+    console.error('Erro ao salvar itens da venda na tabela itens_vendas_bar:', iErr);
+  }
+
+  return sale;
+}
+
+export async function dbGetStockMovements(): Promise<StockMovement[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('movimentacoes_estoque')
+      .select('*')
+      .order('criado_em', { ascending: false });
+
+    if (error || !data) return [];
+
+    return data.map(m => ({
+      id: m.id,
+      productId: m.produto_id,
+      productName: m.nome_produto,
+      type: m.tipo,
+      quantity: Number(m.quantidade) || 0,
+      reason: m.motivo,
+      createdAt: m.criado_em,
+      user: m.nome_usuario || 'Operador do Bar'
+    }));
+  } catch (err) {
+    console.warn('Erro ao buscar movimentações de estoque no Supabase:', err);
+    return [];
+  }
+}
+
+export async function dbSaveStockMovement(movement: StockMovement): Promise<StockMovement | null> {
+  if (!supabase) return null;
+
+  const dbMovement: any = {
+    id: movement.id,
+    produto_id: movement.productId,
+    nome_produto: movement.productName,
+    tipo: movement.type,
+    quantidade: Number(movement.quantity) || 0,
+    motivo: movement.reason,
+    criado_em: movement.createdAt,
+    nome_usuario: movement.user || 'Operador do Bar'
+  };
+
+  const { data, error } = await supabase
+    .from('movimentacoes_estoque')
+    .upsert(dbMovement)
+    .select()
+    .single();
+
+  if (error || !data) {
+    console.error('Erro ao salvar movimentação de estoque:', error);
+    return null;
+  }
+
+  return {
+    id: data.id,
+    productId: data.produto_id,
+    productName: data.nome_produto,
+    type: data.tipo,
+    quantity: Number(data.quantidade) || 0,
+    reason: data.motivo,
+    createdAt: data.criado_em,
+    user: data.nome_usuario || 'Operador do Bar'
+  };
+}
+
+// ====================================================================
 // SCRIPT SQL DDL COMPLETO DAS TABELAS DO SISTEMA
 // ====================================================================
 
@@ -1999,6 +2612,69 @@ CREATE TABLE IF NOT EXISTS public.avaliacao_jogo (
     criado_em TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 18. TABELA DE PRODUTOS DO BAR
+CREATE TABLE IF NOT EXISTS public.produtos_bar (
+    id TEXT PRIMARY KEY,
+    nome TEXT NOT NULL,
+    categoria TEXT DEFAULT 'Bebidas',
+    preco NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+    preco_custo NUMERIC(10,2) DEFAULT 0.00,
+    estoque INTEGER NOT NULL DEFAULT 0,
+    estoque_minimo INTEGER NOT NULL DEFAULT 5,
+    unidade TEXT DEFAULT 'un',
+    imagem TEXT,
+    ativo BOOLEAN DEFAULT TRUE,
+    criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 19. TABELA UNIFICADA DE VENDAS DO BAR (Comandas e Balcão/Venda Direta)
+CREATE TABLE IF NOT EXISTS public.vendas_bar (
+    id TEXT PRIMARY KEY,
+    codigo TEXT NOT NULL,
+    comanda_id TEXT,
+    nome_cliente TEXT,
+    telefone_cliente TEXT,
+    localizacao TEXT DEFAULT 'Balcão',
+    origem_venda TEXT DEFAULT 'balcão' CHECK (origem_venda IN ('comanda', 'balcão')),
+    valor_total NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+    desconto NUMERIC(10,2) DEFAULT 0.00,
+    valor_final NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+    forma_pagamento TEXT,
+    status_pagamento TEXT DEFAULT 'Pago',
+    status TEXT NOT NULL DEFAULT 'Aberta',
+    aberto_em TIMESTAMPTZ,
+    fechado_em TIMESTAMPTZ,
+    criado_em TIMESTAMPTZ DEFAULT NOW(),
+    data DATE NOT NULL DEFAULT CURRENT_DATE,
+    observacoes TEXT
+);
+
+-- 20. TABELA DE ITENS DAS VENDAS DO BAR
+CREATE TABLE IF NOT EXISTS public.itens_vendas_bar (
+    id TEXT PRIMARY KEY,
+    vendas_id TEXT NOT NULL REFERENCES public.vendas_bar(id) ON DELETE CASCADE,
+    comanda_id TEXT,
+    venda_id TEXT,
+    produto_id TEXT REFERENCES public.produtos_bar(id) ON DELETE SET NULL,
+    nome_produto TEXT NOT NULL,
+    quantidade INTEGER NOT NULL DEFAULT 1,
+    preco_unitario NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+    preco_total NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+    adicionado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 21. TABELA DE MOVIMENTAÇÕES DE ESTOQUE DO BAR
+CREATE TABLE IF NOT EXISTS public.movimentacoes_estoque (
+    id TEXT PRIMARY KEY,
+    produto_id TEXT REFERENCES public.produtos_bar(id) ON DELETE CASCADE,
+    nome_produto TEXT NOT NULL,
+    tipo TEXT NOT NULL,
+    quantidade INTEGER NOT NULL,
+    motivo TEXT,
+    criado_em TIMESTAMPTZ DEFAULT NOW(),
+    usuario TEXT DEFAULT 'Operador do Bar'
+);
+
 -- ============================================================
 -- ÍNDICES PARA ALTA PERFORMANCE
 -- ============================================================
@@ -2010,6 +2686,11 @@ CREATE INDEX IF NOT EXISTS idx_jogadores_racha_agendamento ON public.jogadores_r
 CREATE INDEX IF NOT EXISTS idx_membros_time_time ON public.membros_time(time_id);
 CREATE INDEX IF NOT EXISTS idx_avaliacoes_agendamento ON public.avaliacoes_jogadores(agendamento_id);
 CREATE INDEX IF NOT EXISTS idx_avaliacao_jogo_agendamento ON public.avaliacao_jogo(agendamento_id);
+CREATE INDEX IF NOT EXISTS idx_vendas_bar_data ON public.vendas_bar(data);
+CREATE INDEX IF NOT EXISTS idx_vendas_bar_origem ON public.vendas_bar(origem_venda);
+CREATE INDEX IF NOT EXISTS idx_vendas_bar_status ON public.vendas_bar(status);
+CREATE INDEX IF NOT EXISTS idx_itens_vendas_bar_vendas_id ON public.itens_vendas_bar(vendas_id);
+CREATE INDEX IF NOT EXISTS idx_movimentacoes_estoque_produto ON public.movimentacoes_estoque(produto_id);
 `;
 
 

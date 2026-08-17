@@ -393,4 +393,254 @@ INSERT INTO alunos (id, nome, email, telefone, esporte, nivel, professor_id, pro
 ('s0000000-0000-0000-0000-000000000003', 'Rafael Oliveira', 'rafael.oliveira@email.com', '(11) 97777-5555', 'Futevôlei', 'Avançado', 'f0000000-0000-0000-0000-000000000002', 'Professora Fernanda Lima', 'Ativo')
 ON CONFLICT (id) DO NOTHING;
 
+-- ====================================================================
+-- 8. MÓDULO DO BAR: PRODUTOS, VENDAS, ITENS E ESTOQUE
+-- ====================================================================
+
+-- 8.1 Tabela de Produtos do Bar
+CREATE TABLE IF NOT EXISTS produtos_bar (
+    id TEXT PRIMARY KEY,
+    nome VARCHAR(150) NOT NULL,
+    categoria VARCHAR(50) NOT NULL DEFAULT 'Geral',
+    preco NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    preco_custo NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    estoque NUMERIC(10, 2) NOT NULL DEFAULT 0,
+    estoque_minimo NUMERIC(10, 2) NOT NULL DEFAULT 5,
+    unidade VARCHAR(20) NOT NULL DEFAULT 'un',
+    codigo_barras VARCHAR(100),
+    ativo BOOLEAN NOT NULL DEFAULT TRUE,
+    criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 8.2 Tabela de Vendas do Bar (Comandas Abertas, Fechadas e Vendas Balcão)
+CREATE TABLE IF NOT EXISTS vendas_bar (
+    id TEXT PRIMARY KEY,
+    codigo VARCHAR(50) NOT NULL,
+    comanda_id TEXT,
+    nome_cliente VARCHAR(150) NOT NULL DEFAULT 'Cliente',
+    telefone_cliente VARCHAR(50),
+    localizacao VARCHAR(100) DEFAULT 'Balcão',
+    status VARCHAR(30) NOT NULL DEFAULT 'Aberta',
+    origem_venda VARCHAR(20) NOT NULL DEFAULT 'comanda' CHECK (origem_venda IN ('comanda', 'balcão', 'balcao')),
+    aberto_em TIMESTAMP WITH TIME ZONE,
+    fechado_em TIMESTAMP WITH TIME ZONE,
+    criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    data DATE NOT NULL DEFAULT CURRENT_DATE,
+    valor_total NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    desconto NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    valor_final NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    forma_pagamento VARCHAR(50),
+    status_pagamento VARCHAR(30) DEFAULT 'Pago',
+    observacoes TEXT
+);
+
+-- 8.3 Tabela de Itens de Vendas do Bar
+CREATE TABLE IF NOT EXISTS itens_vendas_bar (
+    id TEXT PRIMARY KEY,
+    vendas_id TEXT NOT NULL REFERENCES vendas_bar(id) ON DELETE CASCADE,
+    produto_id TEXT REFERENCES produtos_bar(id) ON DELETE SET NULL,
+    nome_produto VARCHAR(150) NOT NULL,
+    quantidade NUMERIC(10, 2) NOT NULL DEFAULT 1,
+    preco_unitario NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    preco_total NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    adicionado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 8.4 Tabela de Movimentações de Estoque do Bar
+CREATE TABLE IF NOT EXISTS movimentacoes_estoque (
+    id TEXT PRIMARY KEY,
+    produto_id TEXT NOT NULL,
+    nome_produto VARCHAR(150) NOT NULL,
+    tipo VARCHAR(50) NOT NULL,
+    quantidade NUMERIC(10, 2) NOT NULL,
+    motivo TEXT,
+    usuario VARCHAR(100),
+    criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Desabilitar RLS para acesso anon
+ALTER TABLE produtos_bar DISABLE ROW LEVEL SECURITY;
+ALTER TABLE vendas_bar DISABLE ROW LEVEL SECURITY;
+ALTER TABLE itens_vendas_bar DISABLE ROW LEVEL SECURITY;
+ALTER TABLE movimentacoes_estoque DISABLE ROW LEVEL SECURITY;
+
+CREATE INDEX IF NOT EXISTS idx_itens_vendas_bar_vendas_id ON itens_vendas_bar(vendas_id);
+CREATE INDEX IF NOT EXISTS idx_vendas_bar_data ON vendas_bar(data);
+CREATE INDEX IF NOT EXISTS idx_vendas_bar_origem ON vendas_bar(origem_venda);
+
+-- ====================================================================
+-- SCRIPT DE MIGRAÇÃO DEFINITIVO E SEGURO (COMANDAS -> VENDAS & ORIGEM_VENDA)
+-- Execute este script no SQL Editor do Supabase
+-- ====================================================================
+
+-- 1. Garantir que a tabela vendas_bar exista
+CREATE TABLE IF NOT EXISTS vendas_bar (
+    id TEXT PRIMARY KEY,
+    codigo VARCHAR(50) NOT NULL,
+    comanda_id TEXT,
+    nome_cliente VARCHAR(150) NOT NULL DEFAULT 'Cliente',
+    telefone_cliente VARCHAR(50),
+    localizacao VARCHAR(100) DEFAULT 'Balcão',
+    status VARCHAR(30) NOT NULL DEFAULT 'Aberta',
+    origem_venda VARCHAR(20) DEFAULT 'comanda',
+    aberto_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    fechado_em TIMESTAMP WITH TIME ZONE,
+    criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    data DATE NOT NULL DEFAULT CURRENT_DATE,
+    valor_total NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    desconto NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    valor_final NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    forma_pagamento VARCHAR(50),
+    status_pagamento VARCHAR(30) DEFAULT 'Pago',
+    observacoes TEXT
+);
+
+-- 2. Adicionar quaisquer colunas faltantes e remover restrições NOT NULL indevidas em vendas_bar
+ALTER TABLE vendas_bar ADD COLUMN IF NOT EXISTS aberto_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE vendas_bar ADD COLUMN IF NOT EXISTS fechado_em TIMESTAMP WITH TIME ZONE;
+ALTER TABLE vendas_bar ADD COLUMN IF NOT EXISTS criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE vendas_bar ADD COLUMN IF NOT EXISTS origem_venda VARCHAR(20) DEFAULT 'comanda';
+ALTER TABLE vendas_bar ADD COLUMN IF NOT EXISTS comanda_id TEXT;
+ALTER TABLE vendas_bar ADD COLUMN IF NOT EXISTS status_pagamento VARCHAR(30) DEFAULT 'Pago';
+ALTER TABLE vendas_bar ADD COLUMN IF NOT EXISTS localizacao VARCHAR(100) DEFAULT 'Balcão';
+ALTER TABLE vendas_bar ADD COLUMN IF NOT EXISTS telefone_cliente VARCHAR(50);
+ALTER TABLE vendas_bar ADD COLUMN IF NOT EXISTS observacoes TEXT;
+
+-- Permitir valores nulos em colunas que podem não estar preenchidas (ex: comandas em aberto)
+ALTER TABLE vendas_bar ALTER COLUMN forma_pagamento DROP NOT NULL;
+ALTER TABLE vendas_bar ALTER COLUMN status_pagamento DROP NOT NULL;
+ALTER TABLE vendas_bar ALTER COLUMN localizacao DROP NOT NULL;
+ALTER TABLE vendas_bar ALTER COLUMN telefone_cliente DROP NOT NULL;
+ALTER TABLE vendas_bar ALTER COLUMN comanda_id DROP NOT NULL;
+ALTER TABLE vendas_bar ALTER COLUMN fechado_em DROP NOT NULL;
+ALTER TABLE vendas_bar ALTER COLUMN aberto_em DROP NOT NULL;
+ALTER TABLE vendas_bar ALTER COLUMN observacoes DROP NOT NULL;
+
+-- 3. Garantir que a tabela itens_vendas_bar exista
+CREATE TABLE IF NOT EXISTS itens_vendas_bar (
+    id TEXT PRIMARY KEY,
+    vendas_id TEXT NOT NULL REFERENCES vendas_bar(id) ON DELETE CASCADE,
+    produto_id TEXT REFERENCES produtos_bar(id) ON DELETE SET NULL,
+    nome_produto VARCHAR(150) NOT NULL,
+    quantidade NUMERIC(10, 2) NOT NULL DEFAULT 1,
+    preco_unitario NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    preco_total NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    adicionado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 4. Adicionar colunas faltantes em itens_vendas_bar se necessário
+ALTER TABLE itens_vendas_bar ADD COLUMN IF NOT EXISTS vendas_id TEXT;
+ALTER TABLE itens_vendas_bar ADD COLUMN IF NOT EXISTS produto_id TEXT;
+ALTER TABLE itens_vendas_bar ADD COLUMN IF NOT EXISTS nome_produto VARCHAR(150);
+ALTER TABLE itens_vendas_bar ADD COLUMN IF NOT EXISTS quantidade NUMERIC(10, 2) DEFAULT 1;
+ALTER TABLE itens_vendas_bar ADD COLUMN IF NOT EXISTS preco_unitario NUMERIC(10, 2) DEFAULT 0.00;
+ALTER TABLE itens_vendas_bar ADD COLUMN IF NOT EXISTS preco_total NUMERIC(10, 2) DEFAULT 0.00;
+ALTER TABLE itens_vendas_bar ADD COLUMN IF NOT EXISTS adicionado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+
+-- 4.1 Garantir colunas em movimentacoes_estoque
+ALTER TABLE movimentacoes_estoque ADD COLUMN IF NOT EXISTS usuario VARCHAR(100) DEFAULT 'Operador do Bar';
+ALTER TABLE movimentacoes_estoque ADD COLUMN IF NOT EXISTS nome_usuario VARCHAR(100) DEFAULT 'Operador do Bar';
+
+-- 5. Migrar dados da tabela antiga comandas_bar (se existir) para vendas_bar
+DO $$
+BEGIN
+    IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'comandas_bar') THEN
+        EXECUTE '
+            INSERT INTO vendas_bar (id, codigo, nome_cliente, telefone_cliente, localizacao, status, origem_venda, aberto_em, fechado_em, data, valor_total, desconto, valor_final, forma_pagamento, observacoes)
+            SELECT 
+                id, 
+                codigo, 
+                nome_cliente, 
+                telefone_cliente, 
+                localizacao, 
+                status, 
+                ''comanda'',
+                COALESCE(aberto_em, CURRENT_TIMESTAMP), 
+                fechado_em, 
+                data, 
+                COALESCE(valor_total, 0.00), 
+                COALESCE(desconto, 0.00), 
+                COALESCE(valor_final, 0.00), 
+                forma_pagamento, 
+                observacoes
+            FROM comandas_bar
+            ON CONFLICT (id) DO UPDATE SET
+                origem_venda = EXCLUDED.origem_venda,
+                aberto_em = COALESCE(vendas_bar.aberto_em, EXCLUDED.aberto_em),
+                fechado_em = COALESCE(vendas_bar.fechado_em, EXCLUDED.fechado_em);
+        ';
+
+        DROP TABLE comandas_bar CASCADE;
+    END IF;
+END $$;
+
+-- 6. Migrar dados da tabela antiga itens_comanda_bar (se existir) para itens_vendas_bar
+DO $$
+BEGIN
+    IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'itens_comanda_bar') THEN
+        EXECUTE '
+            INSERT INTO itens_vendas_bar (id, vendas_id, produto_id, nome_produto, quantidade, preco_unitario, preco_total, adicionado_em)
+            SELECT 
+                id, 
+                comanda_id, 
+                produto_id, 
+                nome_produto, 
+                COALESCE(quantidade, 1), 
+                COALESCE(preco_unitario, 0.00), 
+                COALESCE(preco_total, 0.00), 
+                COALESCE(adicionado_em, CURRENT_TIMESTAMP)
+            FROM itens_comanda_bar
+            ON CONFLICT (id) DO NOTHING;
+        ';
+
+        DROP TABLE itens_comanda_bar CASCADE;
+    END IF;
+END $$;
+
+-- 7. Migrar dados da tabela antiga itens_venda_bar (caso exista com esse nome no singular)
+DO $$
+BEGIN
+    IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'itens_venda_bar') THEN
+        EXECUTE '
+            INSERT INTO itens_vendas_bar (id, vendas_id, produto_id, nome_produto, quantidade, preco_unitario, preco_total, adicionado_em)
+            SELECT 
+                id, 
+                venda_id, 
+                produto_id, 
+                nome_produto, 
+                COALESCE(quantidade, 1), 
+                COALESCE(preco_unitario, 0.00), 
+                COALESCE(preco_total, 0.00), 
+                COALESCE(adicionado_em, CURRENT_TIMESTAMP)
+            FROM itens_venda_bar
+            ON CONFLICT (id) DO NOTHING;
+        ';
+
+        DROP TABLE itens_venda_bar CASCADE;
+    END IF;
+END $$;
+
+-- 8. Tratar a coluna origem_venda e garantir valores padrão
+UPDATE vendas_bar 
+SET origem_venda = CASE 
+    WHEN comanda_id IS NOT NULL THEN 'comanda' 
+    WHEN origem_venda IS NULL OR origem_venda = '' THEN 'comanda'
+    ELSE origem_venda 
+END;
+
+-- 9. Aplicar restrição CHECK no campo origem_venda
+ALTER TABLE vendas_bar DROP CONSTRAINT IF EXISTS check_origem_venda;
+ALTER TABLE vendas_bar ADD CONSTRAINT check_origem_venda CHECK (origem_venda IN ('comanda', 'balcão', 'balcao'));
+
+-- 10. Desabilitar RLS e criar índices de performance
+ALTER TABLE produtos_bar DISABLE ROW LEVEL SECURITY;
+ALTER TABLE vendas_bar DISABLE ROW LEVEL SECURITY;
+ALTER TABLE itens_vendas_bar DISABLE ROW LEVEL SECURITY;
+ALTER TABLE movimentacoes_estoque DISABLE ROW LEVEL SECURITY;
+
+CREATE INDEX IF NOT EXISTS idx_itens_vendas_bar_vendas_id ON itens_vendas_bar(vendas_id);
+CREATE INDEX IF NOT EXISTS idx_vendas_bar_data ON vendas_bar(data);
+CREATE INDEX IF NOT EXISTS idx_vendas_bar_origem ON vendas_bar(origem_venda);
+
+
 
