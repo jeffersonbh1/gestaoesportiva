@@ -409,8 +409,14 @@ CREATE TABLE IF NOT EXISTS produtos_bar (
     unidade VARCHAR(20) NOT NULL DEFAULT 'un',
     codigo_barras VARCHAR(100),
     ativo BOOLEAN NOT NULL DEFAULT TRUE,
-    criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    status_ativo INTEGER NOT NULL DEFAULT 1, -- 1 = ativo, 0 = inativo (excluído)
+    criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Garantir coluna status_ativo para bases já existentes:
+ALTER TABLE produtos_bar ADD COLUMN IF NOT EXISTS status_ativo INTEGER DEFAULT 1;
+ALTER TABLE produtos_bar ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
 
 -- 8.2 Tabela de Vendas do Bar (Comandas Abertas, Fechadas e Vendas Balcão)
 CREATE TABLE IF NOT EXISTS vendas_bar (
@@ -641,6 +647,140 @@ ALTER TABLE movimentacoes_estoque DISABLE ROW LEVEL SECURITY;
 CREATE INDEX IF NOT EXISTS idx_itens_vendas_bar_vendas_id ON itens_vendas_bar(vendas_id);
 CREATE INDEX IF NOT EXISTS idx_vendas_bar_data ON vendas_bar(data);
 CREATE INDEX IF NOT EXISTS idx_vendas_bar_origem ON vendas_bar(origem_venda);
+
+
+-- ====================================================================
+-- 9. MÓDULO DO JOGADOR: VÍNCULO DE EQUIPES E HISTÓRICO DE SORTEIOS
+-- ====================================================================
+
+-- 9.1 Extensões Recomendadas
+CREATE EXTENSION IF NOT EXISTS "citext"; -- Para e-mails ignorarem maiúsculas/minúsculas
+
+-- 9.2 Tipo Enum para Algoritmo de Sorteio
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tipo_algoritmo') THEN
+        CREATE TYPE tipo_algoritmo AS ENUM ('equilibrado', 'aleatorio');
+    END IF;
+END $$;
+
+-- 9.3 Tabela: jogadores (Usuários Simplificados com Classificação 1 a 5 estrelas)
+CREATE TABLE IF NOT EXISTS jogadores (
+    id TEXT PRIMARY KEY,
+    email CITEXT UNIQUE NOT NULL, -- CITEXT impede duplicidade de e-mail
+    nome_apelido VARCHAR(100) NOT NULL,
+    classificacao_geral DECIMAL(3,2) DEFAULT 3.00, -- Armazena notas como 4.50 ou 5.00
+    criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 9.4 Tabela: equipes (Grupos criados por jogadores)
+CREATE TABLE IF NOT EXISTS equipes (
+    id TEXT PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    criado_por_jogador_id TEXT REFERENCES jogadores(id) ON DELETE SET NULL,
+    criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 9.5 Tabela de Vínculo: equipe_membros (Muitos-para-Muitos com Vínculo Automático por E-mail)
+CREATE TABLE IF NOT EXISTS equipe_membros (
+    equipe_id TEXT REFERENCES equipes(id) ON DELETE CASCADE,
+    jogador_id TEXT REFERENCES jogadores(id) ON DELETE CASCADE,
+    classificacao_na_equipe INT CHECK (classificacao_na_equipe BETWEEN 1 AND 5), -- Classificação individual no grupo
+    inserido_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (equipe_id, jogador_id)
+);
+
+-- 9.6 Tabela: sorteios_historico (Registro de Auditoria e Responsabilidade)
+CREATE TABLE IF NOT EXISTS sorteios_historico (
+    id TEXT PRIMARY KEY,
+    equipe_id TEXT REFERENCES equipes(id) ON DELETE CASCADE,
+    realizado_por_jogador_id TEXT REFERENCES jogadores(id) ON DELETE SET NULL,
+    realizado_por_nome VARCHAR(100) NOT NULL,
+    realizado_por_email VARCHAR(150),
+    algoritmo_utilizado VARCHAR(30) NOT NULL DEFAULT 'equilibrado',
+    quantidade_por_time INT NOT NULL DEFAULT 2,
+    realizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 9.7 Tabela: sorteio_times_resultado (Composição dos times de cada sorteio)
+CREATE TABLE IF NOT EXISTS sorteio_times_resultado (
+    id TEXT PRIMARY KEY,
+    sorteio_id TEXT REFERENCES sorteios_historico(id) ON DELETE CASCADE,
+    identificador_time VARCHAR(50) NOT NULL, -- Ex: 'Time A', 'Time B', 'Espera / Próximos'
+    jogador_id TEXT REFERENCES jogadores(id) ON DELETE CASCADE,
+    jogador_nome VARCHAR(100) NOT NULL,
+    jogador_email VARCHAR(150),
+    classificacao INT NOT NULL DEFAULT 3
+);
+
+-- Desabilitar RLS para permitir uso na aplicação
+ALTER TABLE jogadores DISABLE ROW LEVEL SECURITY;
+ALTER TABLE equipes DISABLE ROW LEVEL SECURITY;
+ALTER TABLE equipe_membros DISABLE ROW LEVEL SECURITY;
+ALTER TABLE sorteios_historico DISABLE ROW LEVEL SECURITY;
+ALTER TABLE sorteio_times_resultado DISABLE ROW LEVEL SECURITY;
+
+-- 9.8 Índices de Performance
+CREATE INDEX IF NOT EXISTS idx_jogadores_email ON jogadores(email);
+CREATE INDEX IF NOT EXISTS idx_equipe_membros_jogador ON equipe_membros(jogador_id);
+CREATE INDEX IF NOT EXISTS idx_equipe_membros_equipe ON equipe_membros(equipe_id);
+CREATE INDEX IF NOT EXISTS idx_sorteios_equipe_data ON sorteios_historico(equipe_id, realizado_em DESC);
+CREATE INDEX IF NOT EXISTS idx_resultado_sorteio ON sorteio_times_resultado(sorteio_id);
+
+-- ====================================================================
+-- 10. MÓDULO DE COMPRAS DO BAR E CUSTO MÉDIO PONDERADO (CMP)
+-- ====================================================================
+
+-- 10.1 Adicionar colunas de suporte a custo médio em produtos_bar
+ALTER TABLE produtos_bar ADD COLUMN IF NOT EXISTS ultimo_preco_compra NUMERIC(10, 2) DEFAULT 0.00;
+ALTER TABLE produtos_bar ADD COLUMN IF NOT EXISTS total_comprado_acumulado NUMERIC(10, 2) DEFAULT 0;
+
+-- 10.2 Tabela de Compras / Notas de Entrada do Bar (compras_bar)
+CREATE TABLE IF NOT EXISTS compras_bar (
+    id TEXT PRIMARY KEY,
+    codigo VARCHAR(50) NOT NULL, -- Ex: 'COMP-001'
+    fornecedor VARCHAR(150),
+    numero_nota VARCHAR(100),
+    data_compra DATE NOT NULL DEFAULT CURRENT_DATE,
+    valor_total NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    forma_pagamento VARCHAR(50) DEFAULT 'Pix',
+    status VARCHAR(30) NOT NULL DEFAULT 'Concluída', -- 'Concluída', 'Pendente', 'Cancelada'
+    observacoes TEXT,
+    usuario VARCHAR(100) DEFAULT 'Administrador',
+    criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 10.3 Tabela de Itens da Compra (itens_compras_bar)
+CREATE TABLE IF NOT EXISTS itens_compras_bar (
+    id TEXT PRIMARY KEY,
+    compra_id TEXT NOT NULL REFERENCES compras_bar(id) ON DELETE CASCADE,
+    produto_id TEXT REFERENCES produtos_bar(id) ON DELETE SET NULL,
+    nome_produto VARCHAR(150) NOT NULL,
+    quantidade NUMERIC(10, 2) NOT NULL DEFAULT 1,
+    unidade VARCHAR(20) NOT NULL DEFAULT 'un',
+    custo_unitario NUMERIC(10, 2) NOT NULL DEFAULT 0.00, -- Preço unitário pago nesta compra
+    custo_total NUMERIC(10, 2) NOT NULL DEFAULT 0.00,    -- quantidade * custo_unitario
+    custo_anterior NUMERIC(10, 2) DEFAULT 0.00,          -- Custo médio antes desta entrada
+    novo_custo_medio NUMERIC(10, 2) DEFAULT 0.00,        -- Custo médio após o recálculo ponderado
+    criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 10.4 Adicionar colunas de custo em movimentacoes_estoque
+ALTER TABLE movimentacoes_estoque ADD COLUMN IF NOT EXISTS preco_custo_unitario NUMERIC(10, 2) DEFAULT 0.00;
+ALTER TABLE movimentacoes_estoque ADD COLUMN IF NOT EXISTS valor_total NUMERIC(10, 2) DEFAULT 0.00;
+ALTER TABLE movimentacoes_estoque ADD COLUMN IF NOT EXISTS compra_id TEXT REFERENCES compras_bar(id) ON DELETE SET NULL;
+
+-- 10.5 Desabilitar RLS para acesso anônimo/público
+ALTER TABLE compras_bar DISABLE ROW LEVEL SECURITY;
+ALTER TABLE itens_compras_bar DISABLE ROW LEVEL SECURITY;
+
+-- 10.6 Índices para consultas rápidas
+CREATE INDEX IF NOT EXISTS idx_compras_bar_data ON compras_bar(data_compra DESC);
+CREATE INDEX IF NOT EXISTS idx_compras_bar_codigo ON compras_bar(codigo);
+CREATE INDEX IF NOT EXISTS idx_itens_compras_compra_id ON itens_compras_bar(compra_id);
+CREATE INDEX IF NOT EXISTS idx_itens_compras_produto_id ON itens_compras_bar(produto_id);
+
 
 
 

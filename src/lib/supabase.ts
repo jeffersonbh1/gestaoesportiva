@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
-import { Court, Booking, BookingStudent, User, Player, PlayerRating, Sport, CourtTypeItem, RentalType, Teacher, Student, Team, TeamMember, AwardQuestion, Torcedor, AvaliacaoJogo, BarProduct, BarComanda, BarComandaItem, BarSale, BarSaleItem, StockMovement } from '../types';
+import { Court, Booking, BookingStudent, User, Player, PlayerRating, Sport, CourtTypeItem, RentalType, Teacher, Student, Team, TeamMember, AwardQuestion, Torcedor, AvaliacaoJogo, BarProduct, BarCategoryItem, BarComanda, BarComandaItem, BarSale, BarSaleItem, StockMovement, BarPurchase, BarPurchaseItem, Jogador, EquipeJogador, EquipeMembro, SorteioHistorico } from '../types';
 import { INITIAL_TEACHERS, INITIAL_STUDENTS, INITIAL_COURT_TYPES, INITIAL_RENTAL_TYPES } from '../data/mockData';
-import { INITIAL_BAR_PRODUCTS } from '../data/mockBarData';
+import { INITIAL_BAR_PRODUCTS, INITIAL_BAR_CATEGORIES } from '../data/mockBarData';
 
 const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
 const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
@@ -1531,13 +1531,13 @@ export async function dbDeleteAwardQuestion(id: string): Promise<boolean> {
 }
 
 // ====================================================================
-// JOGADORES (tabela: jogadores)
+// JOGADORES DO RACHA/AGENDAMENTO (tabela: jogadores_agendamento / fallback)
 // ====================================================================
 
-export async function dbGetJogadores(bookingId?: string): Promise<Player[]> {
+export async function dbGetBookingJogadores(bookingId?: string): Promise<Player[]> {
   if (!supabase) return [];
   try {
-    let query = supabase.from('jogadores').select('*').order('nome', { ascending: true });
+    let query = supabase.from('jogadores_agendamento').select('*').order('nome', { ascending: true });
     if (bookingId && isValidUuid(bookingId)) {
       query = query.eq('agendamento_id', bookingId);
     }
@@ -1553,12 +1553,12 @@ export async function dbGetJogadores(bookingId?: string): Promise<Player[]> {
       amount: Number(j.valor) || 0,
     }));
   } catch (err) {
-    console.warn('Erro ao buscar jogadores da tabela jogadores:', err);
+    console.warn('Erro ao buscar jogadores do agendamento:', err);
     return [];
   }
 }
 
-export async function dbSaveJogador(player: Player, bookingId?: string): Promise<Player | null> {
+export async function dbSaveBookingJogador(player: Player, bookingId?: string): Promise<Player | null> {
   if (!supabase) return null;
 
   const dbPlayer: any = {
@@ -1578,13 +1578,13 @@ export async function dbSaveJogador(player: Player, bookingId?: string): Promise
   }
 
   const { data, error } = await supabase
-    .from('jogadores')
+    .from('jogadores_agendamento')
     .upsert(dbPlayer)
     .select()
     .single();
 
   if (error || !data) {
-    console.error('Erro ao salvar jogador na tabela jogadores:', error);
+    console.error('Erro ao salvar jogador do agendamento:', error);
     return null;
   }
 
@@ -1782,8 +1782,180 @@ export async function dbSaveAvaliacaoJogo(evalItem: Partial<AvaliacaoJogo> & { b
 }
 
 // ====================================================================
-// BAR & GESTÃO DE VENDAS / PRODUTOS / COMANDAS / ESTOQUE
+// BAR & GESTÃO DE VENDAS / PRODUTOS / CATEGORIAS / COMANDAS / ESTOQUE
 // ====================================================================
+
+// Categorias de Produtos do Bar
+export function checkIsCategoryActive(c: any): boolean {
+  if (!c) return false;
+  if (c.ind_cadastro_ativo !== undefined && c.ind_cadastro_ativo !== null) {
+    if (typeof c.ind_cadastro_ativo === 'boolean') {
+      return c.ind_cadastro_ativo === true;
+    }
+    const valStr = String(c.ind_cadastro_ativo).trim().toLowerCase();
+    return valStr === 'true' || valStr === '1' || valStr === 't';
+  }
+  if (c.status_ativo !== undefined && c.status_ativo !== null) {
+    if (typeof c.status_ativo === 'boolean') {
+      return c.status_ativo === true;
+    }
+    const valStr = String(c.status_ativo).trim().toLowerCase();
+    return valStr === 'true' || valStr === '1' || valStr === 't';
+  }
+  return true;
+}
+
+export async function dbGetBarCategories(): Promise<BarCategoryItem[]> {
+  if (!supabase) return INITIAL_BAR_CATEGORIES;
+  try {
+    const { data, error } = await supabase
+      .from('categorias_produtos_bar')
+      .select('*')
+      .order('nome', { ascending: true });
+
+    if (!error && data && data.length > 0) {
+      return data
+        .filter((c: any) => checkIsCategoryActive(c))
+        .map((c: any) => ({
+          id: String(c.id),
+          name: c.nome,
+          description: c.descricao || undefined,
+          color: c.cor || undefined,
+          icon: c.icone || undefined,
+          ind_cadastro_ativo: c.ind_cadastro_ativo !== undefined ? (typeof c.ind_cadastro_ativo === 'boolean' ? c.ind_cadastro_ativo : (Number(c.ind_cadastro_ativo) === 1 || String(c.ind_cadastro_ativo).toLowerCase() === 'true')) : true,
+          status_ativo: c.status_ativo !== undefined ? (typeof c.status_ativo === 'boolean' ? (c.status_ativo ? 1 : 0) : Number(c.status_ativo)) : 1,
+          createdAt: c.criado_em
+        }));
+    }
+
+    // Tenta tabela alternativa caso criada com nome simplificado
+    const { data: altData, error: altErr } = await supabase
+      .from('categorias_bar')
+      .select('*')
+      .order('nome', { ascending: true });
+
+    if (!altErr && altData && altData.length > 0) {
+      return altData
+        .filter((c: any) => checkIsCategoryActive(c))
+        .map((c: any) => ({
+          id: String(c.id),
+          name: c.nome,
+          description: c.descricao || undefined,
+          color: c.cor || undefined,
+          icon: c.icone || undefined,
+          ind_cadastro_ativo: c.ind_cadastro_ativo !== undefined ? (typeof c.ind_cadastro_ativo === 'boolean' ? c.ind_cadastro_ativo : (Number(c.ind_cadastro_ativo) === 1 || String(c.ind_cadastro_ativo).toLowerCase() === 'true')) : true,
+          status_ativo: c.status_ativo !== undefined ? (typeof c.status_ativo === 'boolean' ? (c.status_ativo ? 1 : 0) : Number(c.status_ativo)) : 1,
+          createdAt: c.criado_em
+        }));
+    }
+
+    return INITIAL_BAR_CATEGORIES;
+  } catch (err) {
+    console.warn('Erro ao carregar categorias do bar do Supabase:', err);
+    return INITIAL_BAR_CATEGORIES;
+  }
+}
+
+export async function dbSaveBarCategory(category: BarCategoryItem): Promise<BarCategoryItem | null> {
+  if (!supabase) return category;
+  try {
+    const isCurrentlyActive = checkIsCategoryActive(category);
+    const catId = category.id || `cat-${Date.now()}`;
+
+    const dbCat: any = {
+      id: catId,
+      nome: category.name.trim(),
+      descricao: category.description?.trim() || null,
+      cor: category.color || null,
+      icone: category.icon || null,
+      ind_cadastro_ativo: isCurrentlyActive,
+      status_ativo: isCurrentlyActive ? 1 : 0,
+      atualizado_em: new Date().toISOString()
+    };
+
+    let { data, error } = await supabase
+      .from('categorias_produtos_bar')
+      .upsert(dbCat, { onConflict: 'id' })
+      .select()
+      .single();
+
+    if (error) {
+      // Se der erro de tipo booleano vs inteiro, tenta com 1/0
+      const dbCatNum: any = {
+        ...dbCat,
+        ind_cadastro_ativo: isCurrentlyActive ? 1 : 0
+      };
+      const resNum = await supabase.from('categorias_produtos_bar').upsert(dbCatNum, { onConflict: 'id' }).select().single();
+      if (!resNum.error && resNum.data) {
+        data = resNum.data;
+        error = null;
+      }
+    }
+
+    if (error) {
+      // Tenta na tabela alternativa
+      const altRes = await supabase
+        .from('categorias_bar')
+        .upsert(dbCat, { onConflict: 'id' })
+        .select()
+        .single();
+      if (!altRes.error && altRes.data) {
+        data = altRes.data;
+        error = null;
+      }
+    }
+
+    if (data) {
+      return {
+        id: String(data.id),
+        name: data.nome,
+        description: data.descricao || undefined,
+        color: data.cor || undefined,
+        icon: data.icone || undefined,
+        ind_cadastro_ativo: data.ind_cadastro_ativo !== undefined ? (typeof data.ind_cadastro_ativo === 'boolean' ? data.ind_cadastro_ativo : (Number(data.ind_cadastro_ativo) === 1 || String(data.ind_cadastro_ativo).toLowerCase() === 'true')) : true,
+        status_ativo: data.status_ativo !== undefined ? (typeof data.status_ativo === 'boolean' ? (data.status_ativo ? 1 : 0) : Number(data.status_ativo)) : 1,
+        createdAt: data.criado_em
+      };
+    }
+  } catch (err) {
+    console.warn('Erro ao salvar categoria no Supabase:', err);
+  }
+  return category;
+}
+
+export async function dbDeleteBarCategory(categoryId: string, categoryName?: string): Promise<boolean> {
+  if (!supabase) return true;
+  try {
+    const timestamp = new Date().toISOString();
+
+    // Tenta atualizar ind_cadastro_ativo = false / 0 na tabela categorias_produtos_bar
+    if (categoryId) {
+      const resBool = await supabase.from('categorias_produtos_bar').update({ ind_cadastro_ativo: false, status_ativo: 0, atualizado_em: timestamp }).eq('id', categoryId);
+      if (resBool.error) {
+        await supabase.from('categorias_produtos_bar').update({ ind_cadastro_ativo: 0, status_ativo: 0, atualizado_em: timestamp }).eq('id', categoryId);
+      }
+    }
+    if (categoryName) {
+      const resBool = await supabase.from('categorias_produtos_bar').update({ ind_cadastro_ativo: false, status_ativo: 0, atualizado_em: timestamp }).eq('nome', categoryName.trim());
+      if (resBool.error) {
+        await supabase.from('categorias_produtos_bar').update({ ind_cadastro_ativo: 0, status_ativo: 0, atualizado_em: timestamp }).eq('nome', categoryName.trim());
+      }
+    }
+
+    // Tenta também em categorias_bar
+    if (categoryId) {
+      await supabase.from('categorias_bar').update({ ind_cadastro_ativo: false, status_ativo: 0, atualizado_em: timestamp }).eq('id', categoryId);
+    }
+    if (categoryName) {
+      await supabase.from('categorias_bar').update({ ind_cadastro_ativo: false, status_ativo: 0, atualizado_em: timestamp }).eq('nome', categoryName.trim());
+    }
+
+    return true;
+  } catch (err) {
+    console.warn('Erro ao inativar categoria no Supabase:', err);
+    return false;
+  }
+}
 
 export async function dbGetBarProducts(): Promise<BarProduct[]> {
   if (!supabase) return INITIAL_BAR_PRODUCTS;
@@ -1811,6 +1983,7 @@ export async function dbGetBarProducts(): Promise<BarProduct[]> {
           unidade: p.unit || 'un',
           descricao: p.description || null,
           ativo: p.active ?? true,
+          status_ativo: 1,
           url_imagem: p.imageUrl || null
         }));
         await supabase.from('produtos_bar').insert(toInsert);
@@ -1821,7 +1994,8 @@ export async function dbGetBarProducts(): Promise<BarProduct[]> {
           .order('nome', { ascending: true });
 
         if (reData && reData.length > 0) {
-          return reData.map(p => ({
+          const activeReData = reData.filter(p => p.status_ativo !== 0 && p.status_ativo !== '0' && p.ativo !== false);
+          return activeReData.map(p => ({
             id: p.id,
             name: p.nome,
             category: p.categoria,
@@ -1831,7 +2005,8 @@ export async function dbGetBarProducts(): Promise<BarProduct[]> {
             minStock: Number(p.estoque_minimo) || 5,
             unit: p.unidade || 'un',
             description: p.descricao || undefined,
-            active: p.ativo ?? true,
+            active: true,
+            status_ativo: 1,
             imageUrl: p.url_imagem || undefined
           }));
         }
@@ -1841,17 +2016,23 @@ export async function dbGetBarProducts(): Promise<BarProduct[]> {
       return INITIAL_BAR_PRODUCTS;
     }
 
-    return data.map(p => ({
+    // Filtrar apenas produtos ativos (status_ativo <> 0 e ativo <> false)
+    const activeProducts = data.filter(p => p.status_ativo !== 0 && p.status_ativo !== '0' && p.ativo !== false);
+
+    return activeProducts.map(p => ({
       id: p.id,
       name: p.nome,
       category: p.categoria,
       price: Number(p.preco) || 0,
       costPrice: Number(p.preco_custo) || 0,
+      lastPurchasePrice: Number(p.ultimo_preco_compra) || Number(p.preco_custo) || 0,
+      totalPurchasedQty: Number(p.total_comprado_acumulado) || 0,
       stock: Number(p.estoque) || 0,
       minStock: Number(p.estoque_minimo) || 5,
       unit: p.unidade || 'un',
       description: p.descricao || undefined,
-      active: p.ativo ?? true,
+      active: true,
+      status_ativo: p.status_ativo !== undefined ? Number(p.status_ativo) : 1,
       imageUrl: p.url_imagem || undefined
     }));
   } catch (err) {
@@ -1863,17 +2044,24 @@ export async function dbGetBarProducts(): Promise<BarProduct[]> {
 export async function dbSaveBarProduct(product: BarProduct): Promise<BarProduct | null> {
   if (!supabase) return null;
 
+  // Ao cadastrar ou salvar um produto, inserir status_ativo = 1 (ou 0 caso inativado)
+  const isCurrentlyActive = product.status_ativo !== undefined ? product.status_ativo !== 0 : product.active !== false;
+  const statusAtivoValue = isCurrentlyActive ? 1 : 0;
+
   const dbProduct: any = {
     id: product.id,
     nome: product.name,
     categoria: product.category,
     preco: Number(product.price) || 0,
     preco_custo: Number(product.costPrice) || 0,
+    ultimo_preco_compra: Number(product.lastPurchasePrice) || Number(product.costPrice) || 0,
+    total_comprado_acumulado: Number(product.totalPurchasedQty) || 0,
     estoque: Number(product.stock) || 0,
     estoque_minimo: Number(product.minStock) || 5,
     unidade: product.unit || 'un',
     descricao: product.description || null,
-    ativo: product.active ?? true,
+    ativo: isCurrentlyActive,
+    status_ativo: statusAtivoValue,
     url_imagem: product.imageUrl || null,
     atualizado_em: new Date().toISOString()
   };
@@ -1896,11 +2084,14 @@ export async function dbSaveBarProduct(product: BarProduct): Promise<BarProduct 
       category: data.categoria,
       price: Number(data.preco) || 0,
       costPrice: Number(data.preco_custo) || 0,
+      lastPurchasePrice: Number(data.ultimo_preco_compra) || Number(data.preco_custo) || 0,
+      totalPurchasedQty: Number(data.total_comprado_acumulado) || 0,
       stock: Number(data.estoque) || 0,
       minStock: Number(data.estoque_minimo) || 5,
       unit: data.unidade || 'un',
       description: data.descricao || undefined,
-      active: data.ativo ?? true,
+      active: data.status_ativo !== 0 && data.ativo !== false,
+      status_ativo: data.status_ativo !== undefined ? Number(data.status_ativo) : 1,
       imageUrl: data.url_imagem || undefined
     };
   }
@@ -1911,17 +2102,23 @@ export async function dbSaveBarProduct(product: BarProduct): Promise<BarProduct 
 export async function dbDeleteBarProduct(productId: string): Promise<boolean> {
   if (!supabase) return false;
   try {
+    // Soft-delete / Inativação: atualiza o campo status_ativo para 0 (inativo)
     const { error } = await supabase
       .from('produtos_bar')
-      .delete()
+      .update({
+        status_ativo: 0,
+        ativo: false,
+        atualizado_em: new Date().toISOString()
+      })
       .eq('id', productId);
+
     if (error) {
-      console.error('Erro ao excluir produto do bar:', error);
+      console.error('Erro ao inativar produto do bar no Supabase:', error);
       return false;
     }
     return true;
   } catch (err) {
-    console.error('Erro ao excluir produto do bar:', err);
+    console.error('Erro ao inativar produto do bar:', err);
     return false;
   }
 }
@@ -2207,7 +2404,6 @@ export async function dbGetBarSales(): Promise<BarSale[]> {
 export async function dbSaveBarSale(sale: BarSale): Promise<BarSale | null> {
   if (!supabase) return null;
 
-  // 1. PRIMEIRO: REGISTRA O CABEÇALHO NA TABELA 'vendas_bar'
   const dbSale: any = {
     id: sale.id,
     codigo: sale.code,
@@ -2221,10 +2417,8 @@ export async function dbSaveBarSale(sale: BarSale): Promise<BarSale | null> {
     forma_pagamento: sale.paymentMethod || 'Pix',
     status_pagamento: sale.paymentStatus || 'Pago',
     status: sale.status || 'Concluída',
-    criado_em: formatTimestampForDb(sale.date, sale.createdAt),
-    aberto_em: formatTimestampForDb(sale.date, sale.createdAt),
-    fechado_em: formatTimestampForDb(sale.date, sale.createdAt),
-    data: sale.date || new Date().toISOString().split('T')[0],
+    criado_em: sale.createdAt,
+    data: sale.date,
     observacoes: sale.notes || null,
     origem_venda: sale.origemVenda || (sale.comandaId ? 'comanda' : 'balcão')
   };
@@ -2236,95 +2430,42 @@ export async function dbSaveBarSale(sale: BarSale): Promise<BarSale | null> {
     .single();
 
   if (sErr || !savedSale) {
-    console.error('Erro ao salvar cabeçalho da venda na tabela vendas_bar:', sErr);
+    console.error('Erro ao salvar venda no Supabase:', sErr);
     throw sErr;
   }
 
   const saleId = savedSale.id;
 
-  // 2. SEGUNDO: REGISTRA OS ITENS NA TABELA 'itens_vendas_bar'
   try {
-    // 2.1 Remove itens anteriores para evitar duplicatas em caso de update
     const del1 = await supabase.from('itens_vendas_bar').delete().eq('vendas_id', saleId);
     if (del1.error) {
       await supabase.from('itens_venda_bar').delete().eq('venda_id', saleId);
     }
 
-    // 2.2 Se a venda possui itens, processa a inserção
     if (sale.items && sale.items.length > 0) {
-      // Garante que produtos com productId existam no catálogo para não violar Foreign Key
-      const verifiedItems = [];
-      for (const item of sale.items) {
-        let validProductId: string | null = null;
-        if (item.productId) {
-          const { data: existingProd } = await supabase
-            .from('produtos_bar')
-            .select('id')
-            .eq('id', item.productId)
-            .maybeSingle();
+      const dbItems = sale.items.map(item => ({
+        vendas_id: saleId,
+        venda_id: saleId,
+        produto_id: item.productId,
+        nome_produto: item.productName,
+        quantidade: item.quantity,
+        preco_unitario: Number(item.unitPrice) || 0,
+        preco_total: Number(item.totalPrice) || 0,
+        adicionado_em: sale.createdAt
+      }));
 
-          if (existingProd) {
-            validProductId = existingProd.id;
-          } else {
-            // Tenta cadastrar produto placeholder ou usa null
-            const { error: upsertErr } = await supabase.from('produtos_bar').upsert({
-              id: item.productId,
-              nome: item.productName || 'Produto',
-              categoria: 'Geral',
-              preco: Number(item.unitPrice) || 0,
-              preco_custo: 0,
-              estoque: 100,
-              estoque_minimo: 5,
-              unidade: 'un',
-              ativo: true
-            });
-            validProductId = upsertErr ? null : item.productId;
-          }
-        }
-
-        const itemId = (item as any).id || `item-vd-${saleId.slice(-6)}-${Math.random().toString(36).substring(2, 8)}`;
-        const unitPrice = Number(item.unitPrice) || 0;
-        const qty = Number(item.quantity) || 1;
-        const totalPrice = Number(item.totalPrice) || (qty * unitPrice);
-
-        verifiedItems.push({
-          id: itemId,
-          vendas_id: saleId,
-          comanda_id: sale.comandaId || saleId,
-          venda_id: saleId,
-          produto_id: validProductId,
-          nome_produto: item.productName || 'Produto',
-          quantidade: qty,
-          preco_unitario: unitPrice,
-          preco_total: totalPrice,
-          adicionado_em: formatTimestampForDb(sale.date, item.addedAt || sale.createdAt)
-        });
-      }
-
-      // Tenta inserir na tabela 'itens_vendas_bar' (com vendas_id)
-      const { error: insErr } = await supabase.from('itens_vendas_bar').insert(
-        verifiedItems.map(({ venda_id, comanda_id, ...rest }) => rest)
+      const ins1 = await supabase.from('itens_vendas_bar').insert(
+        dbItems.map(({ venda_id, ...rest }) => rest)
       );
 
-      if (insErr) {
-        console.warn('Tentando fallback para inserir itens_vendas_bar:', insErr.message);
-        // Fallback: tenta inserir com venda_id ou comanda_id caso a tabela tenha sido criada com outra nomenclatura
-        const fallback1 = await supabase.from('itens_venda_bar').insert(
-          verifiedItems.map(({ vendas_id, comanda_id, ...rest }) => rest)
+      if (ins1.error) {
+        await supabase.from('itens_venda_bar').insert(
+          dbItems.map(({ vendas_id, ...rest }) => rest)
         );
-        if (fallback1.error) {
-          // Último recurso: inserir sem produto_id caso tenha havido restrição de chave estrangeira
-          await supabase.from('itens_vendas_bar').insert(
-            verifiedItems.map(({ venda_id, comanda_id, produto_id, ...rest }) => ({
-              ...rest,
-              produto_id: null
-            }))
-          );
-        }
       }
     }
   } catch (iErr) {
-    console.error('Erro ao salvar itens da venda na tabela itens_vendas_bar:', iErr);
+    console.error('Erro ao salvar itens da venda:', iErr);
   }
 
   return sale;
@@ -2344,11 +2485,14 @@ export async function dbGetStockMovements(): Promise<StockMovement[]> {
       id: m.id,
       productId: m.produto_id,
       productName: m.nome_produto,
-      type: m.tipo,
+      type: m.tipo as any,
       quantity: Number(m.quantidade) || 0,
+      unitCost: m.preco_custo_unitario !== undefined && m.preco_custo_unitario !== null ? Number(m.preco_custo_unitario) : undefined,
+      totalCost: m.valor_total !== undefined && m.valor_total !== null ? Number(m.valor_total) : undefined,
+      purchaseId: m.compra_id || undefined,
       reason: m.motivo,
       createdAt: m.criado_em,
-      user: m.nome_usuario || 'Operador do Bar'
+      user: m.nome_usuario || m.usuario || 'Operador do Bar'
     }));
   } catch (err) {
     console.warn('Erro ao buscar movimentações de estoque no Supabase:', err);
@@ -2365,6 +2509,9 @@ export async function dbSaveStockMovement(movement: StockMovement): Promise<Stoc
     nome_produto: movement.productName,
     tipo: movement.type,
     quantidade: Number(movement.quantity) || 0,
+    preco_custo_unitario: movement.unitCost !== undefined ? Number(movement.unitCost) : null,
+    valor_total: movement.totalCost !== undefined ? Number(movement.totalCost) : null,
+    compra_id: movement.purchaseId || null,
     motivo: movement.reason,
     criado_em: movement.createdAt,
     nome_usuario: movement.user || 'Operador do Bar'
@@ -2387,10 +2534,262 @@ export async function dbSaveStockMovement(movement: StockMovement): Promise<Stoc
     productName: data.nome_produto,
     type: data.tipo,
     quantity: Number(data.quantidade) || 0,
+    unitCost: data.preco_custo_unitario !== undefined && data.preco_custo_unitario !== null ? Number(data.preco_custo_unitario) : undefined,
+    totalCost: data.valor_total !== undefined && data.valor_total !== null ? Number(data.valor_total) : undefined,
+    purchaseId: data.compra_id || undefined,
     reason: data.motivo,
     createdAt: data.criado_em,
     user: data.nome_usuario || 'Operador do Bar'
   };
+}
+
+// ====================================================================
+// COMPRAS DO BAR & CUSTO MÉDIO PONDERADO (CMP)
+// ====================================================================
+
+export async function dbGetBarPurchases(): Promise<BarPurchase[]> {
+  if (!supabase) return [];
+  try {
+    const { data: pData, error: pError } = await supabase
+      .from('compras_bar')
+      .select('*')
+      .order('data_compra', { ascending: false });
+
+    if (pError || !pData) return [];
+
+    const { data: iData } = await supabase
+      .from('itens_compras_bar')
+      .select('*');
+
+    const itemsMap: Record<string, BarPurchaseItem[]> = {};
+    (iData || []).forEach((item: any) => {
+      if (!item.compra_id) return;
+      if (!itemsMap[item.compra_id]) itemsMap[item.compra_id] = [];
+      itemsMap[item.compra_id].push({
+        id: item.id,
+        purchaseId: item.compra_id,
+        productId: item.produto_id,
+        productName: item.nome_produto,
+        quantity: Number(item.quantidade) || 1,
+        unit: item.unidade || 'un',
+        costPrice: Number(item.custo_unitario) || 0,
+        totalCost: Number(item.custo_total) || 0,
+        previousCost: Number(item.custo_anterior) || 0,
+        newAverageCost: Number(item.novo_custo_medio) || 0
+      });
+    });
+
+    return pData.map((p: any) => ({
+      id: p.id,
+      code: p.codigo,
+      supplier: p.fornecedor || undefined,
+      invoiceNumber: p.numero_nota || undefined,
+      purchaseDate: p.data_compra || new Date().toISOString().split('T')[0],
+      totalAmount: Number(p.valor_total) || 0,
+      paymentMethod: p.forma_pagamento || 'Pix',
+      status: p.status || 'Concluída',
+      notes: p.observacoes || undefined,
+      user: p.usuario || 'Administrador',
+      createdAt: p.criado_em,
+      items: itemsMap[p.id] || []
+    }));
+  } catch (err) {
+    console.warn('Erro ao carregar compras do bar do Supabase:', err);
+    return [];
+  }
+}
+
+export async function dbSaveBarPurchase(purchase: BarPurchase): Promise<{ savedPurchase: BarPurchase; updatedProducts: BarProduct[] } | null> {
+  if (!supabase) return null;
+
+  const dbPurchase: any = {
+    id: purchase.id,
+    codigo: purchase.code,
+    fornecedor: purchase.supplier || null,
+    numero_nota: purchase.invoiceNumber || null,
+    data_compra: purchase.purchaseDate,
+    valor_total: Number(purchase.totalAmount) || 0,
+    forma_pagamento: purchase.paymentMethod || 'Pix',
+    status: purchase.status || 'Concluída',
+    observacoes: purchase.notes || null,
+    usuario: purchase.user || 'Administrador',
+    atualizado_em: new Date().toISOString()
+  };
+
+  const { data: savedData, error: pErr } = await supabase
+    .from('compras_bar')
+    .upsert(dbPurchase)
+    .select()
+    .single();
+
+  if (pErr || !savedData) {
+    console.error('Erro ao salvar compra no Supabase:', pErr);
+    throw pErr;
+  }
+
+  const updatedProducts: BarProduct[] = [];
+  const processedItems: BarPurchaseItem[] = [];
+
+  // Limpar itens anteriores caso seja uma edição da compra
+  await supabase.from('itens_compras_bar').delete().eq('compra_id', purchase.id);
+
+  if (purchase.items && purchase.items.length > 0) {
+    for (const item of purchase.items) {
+      let currentStock = 0;
+      let currentCost = 0;
+      let currentTotalPurchased = 0;
+      let prodName = item.productName;
+      let prodCategory = 'Geral';
+      let prodPrice = 0;
+      let prodMinStock = 5;
+      let prodUnit = item.unit || 'un';
+
+      const { data: prodData } = await supabase
+        .from('produtos_bar')
+        .select('*')
+        .eq('id', item.productId)
+        .maybeSingle();
+
+      if (prodData) {
+        currentStock = Math.max(0, Number(prodData.estoque) || 0);
+        currentCost = Math.max(0, Number(prodData.preco_custo) || 0);
+        currentTotalPurchased = Number(prodData.total_comprado_acumulado) || 0;
+        prodName = prodData.nome || item.productName;
+        prodCategory = prodData.categoria || 'Geral';
+        prodPrice = Number(prodData.preco) || 0;
+        prodMinStock = Number(prodData.estoque_minimo) || 5;
+        prodUnit = prodData.unidade || item.unit || 'un';
+      }
+
+      const purchaseQty = Number(item.quantity) || 1;
+      const unitCostPaid = Number(item.costPrice) || 0;
+      const newStock = currentStock + purchaseQty;
+
+      // FÓRMULA DO CUSTO MÉDIO PONDERADO (CMP)
+      let newAverageCost = unitCostPaid;
+      if (currentStock > 0 && currentCost > 0) {
+        newAverageCost = ((currentStock * currentCost) + (purchaseQty * unitCostPaid)) / (currentStock + purchaseQty);
+      }
+      newAverageCost = Math.round(newAverageCost * 100) / 100;
+      const newTotalPurchased = currentTotalPurchased + purchaseQty;
+
+      // Atualizar dados de estoque e custo médio no produto
+      const updatedProdPayload: any = {
+        id: item.productId,
+        nome: prodName,
+        categoria: prodCategory,
+        preco: prodPrice,
+        preco_custo: newAverageCost,
+        ultimo_preco_compra: unitCostPaid,
+        total_comprado_acumulado: newTotalPurchased,
+        estoque: newStock,
+        estoque_minimo: prodMinStock,
+        unidade: prodUnit,
+        ativo: true,
+        status_ativo: 1,
+        atualizado_em: new Date().toISOString()
+      };
+
+      const { data: savedProd } = await supabase
+        .from('produtos_bar')
+        .upsert(updatedProdPayload)
+        .select()
+        .single();
+
+      if (savedProd) {
+        updatedProducts.push({
+          id: savedProd.id,
+          name: savedProd.nome,
+          category: savedProd.categoria,
+          price: Number(savedProd.preco) || 0,
+          costPrice: Number(savedProd.preco_custo) || 0,
+          lastPurchasePrice: Number(savedProd.ultimo_preco_compra) || unitCostPaid,
+          totalPurchasedQty: Number(savedProd.total_comprado_acumulado) || newTotalPurchased,
+          stock: Number(savedProd.estoque) || 0,
+          minStock: Number(savedProd.estoque_minimo) || 5,
+          unit: savedProd.unidade || 'un',
+          description: savedProd.descricao || undefined,
+          active: savedProd.status_ativo !== 0 && savedProd.ativo !== false,
+          status_ativo: Number(savedProd.status_ativo) || 1,
+          imageUrl: savedProd.url_imagem || undefined
+        });
+      }
+
+      // Inserir item da compra
+      const itemId = item.id || `item-comp-${purchase.id}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+      const dbItemPayload = {
+        id: itemId,
+        compra_id: purchase.id,
+        produto_id: item.productId,
+        nome_produto: prodName,
+        quantidade: purchaseQty,
+        unidade: prodUnit,
+        custo_unitario: unitCostPaid,
+        custo_total: purchaseQty * unitCostPaid,
+        custo_anterior: currentCost,
+        novo_custo_medio: newAverageCost
+      };
+
+      await supabase.from('itens_compras_bar').insert(dbItemPayload);
+
+      processedItems.push({
+        ...item,
+        id: itemId,
+        purchaseId: purchase.id,
+        productName: prodName,
+        quantity: purchaseQty,
+        unit: prodUnit,
+        costPrice: unitCostPaid,
+        totalCost: purchaseQty * unitCostPaid,
+        previousCost: currentCost,
+        newAverageCost: newAverageCost
+      });
+
+      // Registrar histórico de movimentação de estoque
+      const movPayload = {
+        id: `mov-comp-${purchase.id}-${item.productId}-${Date.now()}`,
+        produto_id: item.productId,
+        nome_produto: prodName,
+        tipo: 'Entrada (Compra)',
+        quantidade: purchaseQty,
+        motivo: `Compra ${purchase.code} - Fornecedor: ${purchase.supplier || 'Geral'}`,
+        preco_custo_unitario: unitCostPaid,
+        valor_total: purchaseQty * unitCostPaid,
+        compra_id: purchase.id,
+        nome_usuario: purchase.user || 'Administrador',
+        criado_em: new Date().toISOString()
+      };
+
+      await supabase.from('movimentacoes_estoque').insert(movPayload);
+    }
+  }
+
+  return {
+    savedPurchase: {
+      ...purchase,
+      items: processedItems
+    },
+    updatedProducts
+  };
+}
+
+export async function dbDeleteBarPurchase(purchaseId: string): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const { error } = await supabase
+      .from('compras_bar')
+      .delete()
+      .eq('id', purchaseId);
+
+    if (error) {
+      console.error('Erro ao deletar compra no Supabase:', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Erro ao deletar compra do bar:', err);
+    return false;
+  }
 }
 
 // ====================================================================
@@ -2692,5 +3091,295 @@ CREATE INDEX IF NOT EXISTS idx_vendas_bar_status ON public.vendas_bar(status);
 CREATE INDEX IF NOT EXISTS idx_itens_vendas_bar_vendas_id ON public.itens_vendas_bar(vendas_id);
 CREATE INDEX IF NOT EXISTS idx_movimentacoes_estoque_produto ON public.movimentacoes_estoque(produto_id);
 `;
+
+// ====================================================================
+// MÓDULO DO JOGADOR: JOGADORES, EQUIPES, VÍNCULOS E HISTÓRICO DE SORTEIOS
+// ====================================================================
+
+export async function dbGetJogadores(): Promise<Jogador[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('jogadores')
+      .select('*')
+      .order('nome_apelido', { ascending: true });
+
+    if (error) throw error;
+
+    return (data || []).map((j) => ({
+      id: j.id,
+      email: j.email,
+      nomeApelido: j.nome_apelido,
+      classificacaoGeral: Number(j.classificacao_geral) || 3.0,
+      criadoEm: j.criado_em,
+    }));
+  } catch (err) {
+    console.warn('Erro ao buscar jogadores do Supabase:', err);
+    return [];
+  }
+}
+
+export async function dbSaveJogador(jogador: Jogador): Promise<Jogador | null> {
+  if (!supabase) return null;
+  try {
+    const dbPayload = {
+      id: jogador.id,
+      email: jogador.email.toLowerCase().trim(),
+      nome_apelido: jogador.nomeApelido.trim(),
+      classificacao_geral: jogador.classificacaoGeral,
+    };
+
+    const { data, error } = await supabase
+      .from('jogadores')
+      .upsert(dbPayload, { onConflict: 'email' })
+      .select()
+      .single();
+
+    if (error) throw error;
+    if (!data) return null;
+
+    return {
+      id: data.id,
+      email: data.email,
+      nomeApelido: data.nome_apelido,
+      classificacaoGeral: Number(data.classificacao_geral) || 3.0,
+      criadoEm: data.criado_em,
+    };
+  } catch (err) {
+    console.warn('Erro ao salvar jogador no Supabase:', err);
+    return null;
+  }
+}
+
+export async function dbGetEquipes(): Promise<EquipeJogador[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('equipes')
+      .select('*')
+      .order('criado_em', { ascending: false });
+
+    if (error) throw error;
+
+    return (data || []).map((e) => ({
+      id: e.id,
+      nome: e.nome,
+      criadoPorJogadorId: e.criado_por_jogador_id,
+      criadoEm: e.criado_em,
+    }));
+  } catch (err) {
+    console.warn('Erro ao buscar equipes do Supabase:', err);
+    return [];
+  }
+}
+
+export async function dbSaveEquipe(equipe: EquipeJogador): Promise<EquipeJogador | null> {
+  if (!supabase) return null;
+  try {
+    const dbPayload = {
+      id: equipe.id,
+      nome: equipe.nome.trim(),
+      criado_por_jogador_id: equipe.criadoPorJogadorId || null,
+    };
+
+    const { data, error } = await supabase
+      .from('equipes')
+      .upsert(dbPayload)
+      .select()
+      .single();
+
+    if (error) throw error;
+    if (!data) return null;
+
+    return {
+      id: data.id,
+      nome: data.nome,
+      criadoPorJogadorId: data.criado_por_jogador_id,
+      criadoEm: data.criado_em,
+    };
+  } catch (err) {
+    console.warn('Erro ao salvar equipe no Supabase:', err);
+    return null;
+  }
+}
+
+export async function dbGetEquipeMembros(equipeId?: string): Promise<EquipeMembro[]> {
+  if (!supabase) return [];
+  try {
+    let query = supabase.from('equipe_membros').select(`
+      equipe_id,
+      jogador_id,
+      classificacao_na_equipe,
+      inserido_em,
+      jogadores:jogador_id (
+        id,
+        email,
+        nome_apelido
+      )
+    `);
+
+    if (equipeId) {
+      query = query.eq('equipe_id', equipeId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    return (data || []).map((row: any) => ({
+      equipeId: row.equipe_id,
+      jogadorId: row.jogador_id,
+      classificacaoNaEquipe: Number(row.classificacao_na_equipe) || 3,
+      inseridoEm: row.inserido_em,
+      nomeApelido: row.jogadores?.nome_apelido,
+      email: row.jogadores?.email,
+    }));
+  } catch (err) {
+    console.warn('Erro ao buscar membros de equipes do Supabase:', err);
+    return [];
+  }
+}
+
+export async function dbSaveEquipeMembro(membro: EquipeMembro): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const dbPayload = {
+      equipe_id: membro.equipeId,
+      jogador_id: membro.jogadorId,
+      classificacao_na_equipe: membro.classificacaoNaEquipe,
+    };
+
+    const { error } = await supabase
+      .from('equipe_membros')
+      .upsert(dbPayload, { onConflict: 'equipe_id,jogador_id' });
+
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.warn('Erro ao salvar membro de equipe no Supabase:', err);
+    return false;
+  }
+}
+
+export async function dbDeleteEquipeMembro(equipeId: string, jogadorId: string): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const { error } = await supabase
+      .from('equipe_membros')
+      .delete()
+      .eq('equipe_id', equipeId)
+      .eq('jogador_id', jogadorId);
+
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.warn('Erro ao remover membro da equipe no Supabase:', err);
+    return false;
+  }
+}
+
+export async function dbGetSorteiosHistorico(equipeId?: string): Promise<SorteioHistorico[]> {
+  if (!supabase) return [];
+  try {
+    let query = supabase
+      .from('sorteios_historico')
+      .select(`
+        id,
+        equipe_id,
+        realizado_por_jogador_id,
+        realizado_por_nome,
+        realizado_por_email,
+        algoritmo_utilizado,
+        quantidade_por_time,
+        realizado_em,
+        equipes:equipe_id ( nome ),
+        sorteio_times_resultado (
+          id,
+          sorteio_id,
+          identificador_time,
+          jogador_id,
+          jogador_nome,
+          jogador_email,
+          classificacao
+        )
+      `)
+      .order('realizado_em', { ascending: false });
+
+    if (equipeId) {
+      query = query.eq('equipe_id', equipeId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      equipeId: row.equipe_id,
+      equipeNome: row.equipes?.nome,
+      realizadoPorJogadorId: row.realizado_por_jogador_id,
+      realizadoPorNome: row.realizado_por_nome,
+      realizadoPorEmail: row.realizado_por_email,
+      algoritmoUtilizado: row.algoritmo_utilizado as any,
+      quantidadePorTime: Number(row.quantidade_por_time) || 2,
+      realizadoEm: row.realizado_em,
+      timesResultado: (row.sorteio_times_resultado || []).map((tr: any) => ({
+        id: tr.id,
+        sorteioId: tr.sorteio_id,
+        identificadorTime: tr.identificador_time,
+        jogadorId: tr.jogador_id,
+        jogadorNome: tr.jogador_nome,
+        jogadorEmail: tr.jogador_email,
+        classificacao: Number(tr.classificacao) || 3,
+      })),
+    }));
+  } catch (err) {
+    console.warn('Erro ao buscar histórico de sorteios do Supabase:', err);
+    return [];
+  }
+}
+
+export async function dbSaveSorteioHistorico(sorteio: SorteioHistorico): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const sorteioPayload = {
+      id: sorteio.id,
+      equipe_id: sorteio.equipeId,
+      realizado_por_jogador_id: sorteio.realizadoPorJogadorId || null,
+      realizado_por_nome: sorteio.realizadoPorNome,
+      realizado_por_email: sorteio.realizadoPorEmail || null,
+      algoritmo_utilizado: sorteio.algoritmoUtilizado,
+      quantidade_por_time: sorteio.quantidadePorTime,
+      realizado_em: sorteio.realizadoEm,
+    };
+
+    const { error: sorteioError } = await supabase
+      .from('sorteios_historico')
+      .upsert(sorteioPayload);
+
+    if (sorteioError) throw sorteioError;
+
+    if (sorteio.timesResultado && sorteio.timesResultado.length > 0) {
+      const timesPayload = sorteio.timesResultado.map((item, idx) => ({
+        id: item.id || `str-${sorteio.id}-${idx}`,
+        sorteio_id: sorteio.id,
+        identificador_time: item.identificadorTime,
+        jogador_id: item.jogadorId,
+        jogador_nome: item.jogadorNome,
+        jogador_email: item.jogadorEmail || null,
+        classificacao: item.classificacao,
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('sorteio_times_resultado')
+        .upsert(timesPayload);
+
+      if (itemsError) throw itemsError;
+    }
+
+    return true;
+  } catch (err) {
+    console.warn('Erro ao salvar sorteio e resultados no Supabase:', err);
+    return false;
+  }
+}
 
 

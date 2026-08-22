@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
-import { isSupabaseConfigured, dbGetRatings, dbGetJogadores, dbSaveJogador, dbSaveTorcedor } from '../lib/supabase';
+import { isSupabaseConfigured, dbGetRatings, dbGetBookingJogadores, dbSaveBookingJogador, dbSaveTorcedor } from '../lib/supabase';
 
 interface PublicEvaluationViewProps {
   booking: Booking;
@@ -69,7 +69,7 @@ export default function PublicEvaluationView({
           const dbData = await dbGetRatings(booking.id);
           setExistingRatings(dbData);
 
-          const dbPlayers = await dbGetJogadores(booking.id);
+          const dbPlayers = await dbGetBookingJogadores(booking.id);
           if (dbPlayers && dbPlayers.length > 0) {
             setCurrentPlayers(dbPlayers);
           }
@@ -129,7 +129,7 @@ export default function PublicEvaluationView({
     };
 
     if (isSupabaseConfigured) {
-      const savedDbPlayer = await dbSaveJogador(newPlayerObj, booking.id);
+      const savedDbPlayer = await dbSaveBookingJogador(newPlayerObj, booking.id);
       if (savedDbPlayer) {
         newPlayerObj.id = savedDbPlayer.id;
       }

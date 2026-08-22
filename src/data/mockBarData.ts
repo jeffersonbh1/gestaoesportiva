@@ -1,5 +1,17 @@
-import { BarProduct, BarSale, BarComanda, StockMovement } from '../types';
+import { BarProduct, BarCategoryItem, BarSale, BarComanda, StockMovement } from '../types';
 import { getBrasiliaTodayDate, shiftDateString } from '../utils';
+
+export const INITIAL_BAR_CATEGORIES: BarCategoryItem[] = [
+  { id: 'cat-1', name: 'Bebidas', status_ativo: 1 },
+  { id: 'cat-2', name: 'Salgados', status_ativo: 1 },
+  { id: 'cat-3', name: 'Petiscos', status_ativo: 1 },
+  { id: 'cat-4', name: 'Espetinhos', status_ativo: 1 },
+  { id: 'cat-5', name: 'Sanduíches', status_ativo: 1 },
+  { id: 'cat-6', name: 'Picolés', status_ativo: 1 },
+  { id: 'cat-7', name: 'Açaí', status_ativo: 1 },
+  { id: 'cat-8', name: 'Doces', status_ativo: 1 },
+  { id: 'cat-9', name: 'Outros', status_ativo: 1 },
+];
 
 export const INITIAL_BAR_PRODUCTS: BarProduct[] = [
   // Bebidas
@@ -216,6 +228,118 @@ export const INITIAL_BAR_PRODUCTS: BarProduct[] = [
     description: 'Pão de forma especial na manteiga, presunto e queijo derretido',
     active: true,
     imageUrl: 'https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=300&auto=format&fit=crop&q=80'
+  },
+
+  // Salgados
+  {
+    id: 'prod-17',
+    name: 'Coxinha de Frango com Catupiry',
+    category: 'Salgados',
+    price: 8.50,
+    costPrice: 3.80,
+    stock: 24,
+    minStock: 6,
+    unit: 'un',
+    description: 'Coxinha crocante recheada com frango desfiado e catupiry',
+    active: true,
+    imageUrl: 'https://images.unsplash.com/photo-1541592106381-b31e9677c0e5?w=300&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'prod-18',
+    name: 'Enroladinho de Presunto e Queijo',
+    category: 'Salgados',
+    price: 8.00,
+    costPrice: 3.50,
+    stock: 20,
+    minStock: 5,
+    unit: 'un',
+    description: 'Massa assada macia recheada com presunto e mussarela',
+    active: true,
+    imageUrl: 'https://images.unsplash.com/photo-1509722747041-616f39b57569?w=300&auto=format&fit=crop&q=80'
+  },
+
+  // Picolés
+  {
+    id: 'prod-19',
+    name: 'Picolé Frutas Tropicais (Maracujá/Limão)',
+    category: 'Picolés',
+    price: 6.00,
+    costPrice: 2.20,
+    stock: 35,
+    minStock: 10,
+    unit: 'un',
+    description: 'Picolé refrescante feito com polpa de fruta natural',
+    active: true,
+    imageUrl: 'https://images.unsplash.com/photo-1505394033641-40c6ad1178d7?w=300&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'prod-20',
+    name: 'Picolé Especial Chocolate Belga',
+    category: 'Picolés',
+    price: 9.00,
+    costPrice: 4.00,
+    stock: 20,
+    minStock: 6,
+    unit: 'un',
+    description: 'Picolé cremoso de chocolate com cobertura crocante',
+    active: true,
+    imageUrl: 'https://images.unsplash.com/photo-1488900128323-21503983a07e?w=300&auto=format&fit=crop&q=80'
+  },
+
+  // Açaí
+  {
+    id: 'prod-21',
+    name: 'Copo de Açaí Tradicional 300ml',
+    category: 'Açaí',
+    price: 16.00,
+    costPrice: 7.00,
+    stock: 30,
+    minStock: 8,
+    unit: 'un',
+    description: 'Açaí batido puro, acompanha granola e banana fatiada',
+    active: true,
+    imageUrl: 'https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?w=300&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'prod-22',
+    name: 'Tigela de Açaí Especial 500ml',
+    category: 'Açaí',
+    price: 24.00,
+    costPrice: 10.50,
+    stock: 20,
+    minStock: 5,
+    unit: 'un',
+    description: 'Açaí 500ml com leite condensado, leite em pó, morango e paçoca',
+    active: true,
+    imageUrl: 'https://images.unsplash.com/photo-1553882951-9c3dab4a50cb?w=300&auto=format&fit=crop&q=80'
+  },
+
+  // Doces
+  {
+    id: 'prod-23',
+    name: 'Barra de Chocolate / Bombom Especial',
+    category: 'Doces',
+    price: 5.00,
+    costPrice: 2.00,
+    stock: 40,
+    minStock: 10,
+    unit: 'un',
+    description: 'Diversos sabores (Sonho de Valsa, Ouro Branco, KitKat)',
+    active: true,
+    imageUrl: 'https://images.unsplash.com/photo-1548848221-0c2e497ed557?w=300&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'prod-24',
+    name: 'Pudim de Leite Condensado (Pote 150g)',
+    category: 'Doces',
+    price: 10.00,
+    costPrice: 4.20,
+    stock: 15,
+    minStock: 4,
+    unit: 'un',
+    description: 'Pudim caseiro cremoso com calda de caramelo',
+    active: true,
+    imageUrl: 'https://images.unsplash.com/photo-1528975604071-b4dc52a2d18c?w=300&auto=format&fit=crop&q=80'
   }
 ];
 

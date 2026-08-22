@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { BarComanda, BarComandaItem, BarProduct, BarSale, PaymentMethod } from '../../types';
+import React, { useState, useMemo } from 'react';
+import { BarComanda, BarComandaItem, BarProduct, BarSale, PaymentMethod, BarCategoryItem } from '../../types';
 import { formatCurrency, getBrasiliaTodayDate } from '../../utils';
 import { 
   Plus, 
@@ -34,6 +34,7 @@ import {
 interface BarComandasManagerProps {
   comandas: BarComanda[];
   products: BarProduct[];
+  categories?: BarCategoryItem[];
   onOpenComanda: (newComanda: BarComanda) => void;
   onAddItemToComanda: (comandaId: string, itemsToAdd: BarComandaItem[]) => void;
   onRemoveItemFromComanda: (comandaId: string, itemId: string) => void;
@@ -45,6 +46,7 @@ interface BarComandasManagerProps {
 export default function BarComandasManager({
   comandas,
   products,
+  categories = [],
   onOpenComanda,
   onAddItemToComanda,
   onRemoveItemFromComanda,
@@ -80,7 +82,32 @@ export default function BarComandasManager({
   const [cashGiven, setCashGiven] = useState<string>('');
   const [checkoutNotes, setCheckoutNotes] = useState<string>('');
 
-  const categories = ['Todas', 'Bebidas', 'Petiscos', 'Espetinhos', 'Sanduíches', 'Outros'];
+  const computedCategories = useMemo(() => {
+    const activeFromCategories = (categories || [])
+      .filter(c => {
+        if (c.ind_cadastro_ativo !== undefined && c.ind_cadastro_ativo !== null) {
+          if (typeof c.ind_cadastro_ativo === 'boolean') return c.ind_cadastro_ativo === true;
+          const v = String(c.ind_cadastro_ativo).trim().toLowerCase();
+          return v === 'true' || v === '1' || v === 't';
+        }
+        if (c.status_ativo !== undefined && c.status_ativo !== null) {
+          if (typeof c.status_ativo === 'boolean') return c.status_ativo === true;
+          const v = String(c.status_ativo).trim().toLowerCase();
+          return v === 'true' || v === '1' || v === 't';
+        }
+        return true;
+      })
+      .map(c => c.name.trim())
+      .filter(Boolean);
+
+    if (activeFromCategories.length > 0) {
+      return ['Todas', ...Array.from(new Set(activeFromCategories))];
+    }
+
+    const fromProducts = products.map(p => (p.category || '').trim()).filter(Boolean);
+    const unique = Array.from(new Set(fromProducts));
+    return ['Todas', ...(unique.length > 0 ? unique : ['Bebidas', 'Salgados', 'Petiscos', 'Outros'])];
+  }, [categories, products]);
 
   // Filter Comandas
   const filteredComandas = comandas.filter(c => {
@@ -679,7 +706,7 @@ export default function BarComandasManager({
 
                 {/* Categories filter */}
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-                  {categories.map((cat) => (
+                  {computedCategories.map((cat) => (
                     <button
                       key={cat}
                       onClick={() => setAddCategory(cat)}
@@ -698,7 +725,17 @@ export default function BarComandasManager({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[380px] overflow-y-auto pr-1">
                   {products
                     .filter(p => p.active)
-                    .filter(p => addCategory === 'Todas' || p.category === addCategory)
+                    .filter(p => {
+                      if (addCategory === 'Todas') return true;
+                      const prodCat = (p.category || '').toLowerCase().trim();
+                      const selCat = addCategory.toLowerCase().trim();
+                      if (prodCat === selCat) return true;
+                      if (selCat === 'salgados' && (prodCat === 'salgado' || prodCat === 'salgados')) return true;
+                      if (selCat === 'picolés' && (prodCat === 'picolé' || prodCat === 'picole' || prodCat === 'picolés' || prodCat === 'picoles')) return true;
+                      if (selCat === 'açaí' && (prodCat === 'açaí' || prodCat === 'acai' || prodCat === 'açaí' || prodCat === 'acaí')) return true;
+                      if (selCat === 'doces' && (prodCat === 'doce' || prodCat === 'doces')) return true;
+                      return false;
+                    })
                     .filter(p => p.name.toLowerCase().includes(addSearch.toLowerCase()))
                     .map((product) => {
                       const selectedInCart = selectedAddCart.find(i => i.product.id === product.id);

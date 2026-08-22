@@ -41,6 +41,7 @@ import EvaluationModule from './components/EvaluationModule';
 import PublicEvaluationView from './components/PublicEvaluationView';
 import ModuleHub from './components/ModuleHub';
 import BarModule from './components/bar/BarModule';
+import PlayerModule from './components/player/PlayerModule';
 import { AwardQuestion } from './types';
 import { getBrasiliaTodayDate, shiftDateString } from './utils';
 import { 
@@ -168,7 +169,7 @@ export default function App() {
     if (!selectedDate) return;
     setSelectedDate(shiftDateString(selectedDate, 1));
   };
-  const [activeModule, setActiveModule] = useState<'hub' | 'quadras' | 'bar'>(() => {
+  const [activeModule, setActiveModule] = useState<'hub' | 'quadras' | 'bar' | 'jogador'>(() => {
     const saved = localStorage.getItem('arena_active_module');
     return (saved as any) || 'hub';
   });
@@ -730,12 +731,24 @@ export default function App() {
         <ModuleHub 
           onSelectQuadras={() => setActiveModule('quadras')} 
           onSelectBar={() => setActiveModule('bar')} 
+          onSelectJogador={() => setActiveModule('jogador')}
         />
 
         <footer className="bg-white border-t border-slate-200 py-3 text-center text-xs text-slate-400 font-medium">
-          Arena Fahel Beach © 2026 • Módulo Esportivo & Gestão de Bar
+          Arena Fahel Beach © 2026 • Quadras, Bar & Módulo do Jogador
         </footer>
       </div>
+    );
+  }
+
+  // 0. Player Management Module View
+  if (activeModule === 'jogador') {
+    return (
+      <PlayerModule 
+        onBackToHub={() => setActiveModule('hub')} 
+        onNavigateToCourts={() => setActiveModule('quadras')} 
+        onNavigateToBar={() => setActiveModule('bar')} 
+      />
     );
   }
 
@@ -782,10 +795,21 @@ export default function App() {
           </div>
 
           {/* Module Switch Quick Banner in Sidebar */}
-          <div className="p-3 border-b border-slate-100 bg-amber-50/60 space-y-1.5">
+          <div className="p-3 border-b border-slate-100 bg-slate-50 space-y-1.5">
+            <button
+              onClick={() => setActiveModule('jogador')}
+              className="w-full flex items-center justify-between px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition shadow-2xs cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                <span>Módulo do Jogador</span>
+              </div>
+              <ChevronRight className="h-4 w-4 opacity-80" />
+            </button>
+
             <button
               onClick={() => setActiveModule('bar')}
-              className="w-full flex items-center justify-between px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold transition shadow-sm cursor-pointer"
+              className="w-full flex items-center justify-between px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold transition shadow-2xs cursor-pointer"
             >
               <div className="flex items-center gap-2">
                 <UtensilsCrossed className="h-4 w-4" />
@@ -799,7 +823,7 @@ export default function App() {
               className="w-full text-center text-[10px] font-bold text-slate-500 hover:text-slate-800 py-1 transition flex items-center justify-center gap-1 cursor-pointer"
             >
               <ArrowLeftRight className="h-3 w-3" />
-              Mudar Módulo do Sistema
+              Central de Módulos
             </button>
           </div>
 

@@ -1,21 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { BarComanda, BarComandaItem, BarProduct, BarSale, PaymentMethod, StockMovement, User } from '../../types';
-import { INITIAL_BAR_PRODUCTS, getInitialBarSales, getInitialComandas, getInitialStockMovements } from '../../data/mockBarData';
+import { BarComanda, BarComandaItem, BarProduct, BarCategoryItem, BarSale, BarPurchase, PaymentMethod, StockMovement, User } from '../../types';
+import { INITIAL_BAR_PRODUCTS, INITIAL_BAR_CATEGORIES, getInitialBarSales, getInitialComandas, getInitialStockMovements } from '../../data/mockBarData';
 import { 
   isSupabaseConfigured,
   dbGetBarProducts,
   dbSaveBarProduct,
   dbDeleteBarProduct,
+  dbGetBarCategories,
+  dbSaveBarCategory,
+  dbDeleteBarCategory,
   dbGetBarComandas,
   dbSaveBarComanda,
   dbGetBarSales,
   dbSaveBarSale,
   dbGetStockMovements,
-  dbSaveStockMovement
+  dbSaveStockMovement,
+  dbGetBarPurchases,
+  dbSaveBarPurchase,
+  dbDeleteBarPurchase
 } from '../../lib/supabase';
 import BarComandasManager from './BarComandasManager';
 import BarDirectSaleManager from './BarDirectSaleManager';
 import BarProductsManager from './BarProductsManager';
+import BarPurchasesManager from './BarPurchasesManager';
 import BarSalesReports from './BarSalesReports';
 import BarStockMovements from './BarStockMovements';
 import { 
@@ -26,13 +33,7 @@ import {
   History, 
   Volleyball, 
   ArrowLeftRight,
-  UtensilsCrossed,
-  TrendingUp,
-  AlertCircle,
-  Menu,
-  X,
-  RefreshCw,
-  ChevronRight
+  ShoppingCart
 } from 'lucide-react';
 
 interface BarModuleProps {
@@ -46,12 +47,14 @@ export default function BarModule({
   onSwitchToQuadras,
   onSwitchModuleHub
 }: BarModuleProps) {
-  const [activeBarTab, setActiveBarTab] = useState<'comandas' | 'directSale' | 'products' | 'reports' | 'movements'>('comandas');
+  const [activeBarTab, setActiveBarTab] = useState<'comandas' | 'directSale' | 'products' | 'purchases' | 'reports' | 'movements'>('comandas');
 
   // State in memory - Database as single source of truth
   const [comandas, setComandas] = useState<BarComanda[]>(() => isSupabaseConfigured ? [] : getInitialComandas());
   const [products, setProducts] = useState<BarProduct[]>(INITIAL_BAR_PRODUCTS);
+  const [categories, setCategories] = useState<BarCategoryItem[]>(INITIAL_BAR_CATEGORIES);
   const [sales, setSales] = useState<BarSale[]>(() => isSupabaseConfigured ? [] : getInitialBarSales());
+  const [purchases, setPurchases] = useState<BarPurchase[]>([]);
   const [movements, setMovements] = useState<StockMovement[]>(() => isSupabaseConfigured ? [] : getInitialStockMovements());
 
   // Clear any existing localStorage cache to adhere to "no local storage" policy
@@ -61,6 +64,8 @@ export default function BarModule({
       localStorage.removeItem('arena_bar_products');
       localStorage.removeItem('arena_bar_sales');
       localStorage.removeItem('arena_bar_stock_movements');
+      localStorage.removeItem('arena_bar_purchases');
+      localStorage.removeItem('arena_bar_categories');
     } catch (e) {
       // Ignore if localStorage is restricted
     }
@@ -71,16 +76,20 @@ export default function BarModule({
     async function loadBarDataFromDb() {
       if (!isSupabaseConfigured) return;
       try {
-        const [dbProds, dbCmds, dbSls, dbMovs] = await Promise.all([
+        const [dbProds, dbCats, dbCmds, dbSls, dbMovs, dbPchs] = await Promise.all([
           dbGetBarProducts(),
+          dbGetBarCategories(),
           dbGetBarComandas(),
           dbGetBarSales(),
-          dbGetStockMovements()
+          dbGetStockMovements(),
+          dbGetBarPurchases()
         ]);
         if (dbProds && dbProds.length > 0) setProducts(dbProds);
+        if (dbCats && dbCats.length > 0) setCategories(dbCats);
         setComandas(dbCmds || []);
         setSales(dbSls || []);
         setMovements(dbMovs || []);
+        setPurchases(dbPchs || []);
       } catch (err) {
         console.error('Erro ao carregar dados do bar do Supabase:', err);
       }
@@ -384,6 +393,84 @@ export default function BarModule({
     }
   };
 
+  // Handle Save / Update Category
+  const handleSaveCategory = async (categoryToSave: BarCategoryItem) => {
+    const formattedCat: BarCategoryItem = {
+      ...categoryToSave,
+      status_ativo: 1
+    };
+
+    setCategories(prev => {
+      const exists = prev.some(c => c.id === formattedCat.id || c.name.trim().toLowerCase() === formattedCat.name.trim().toLowerCase());
+      if (exists) {
+        return prev.map(c => 
+          (c.id === formattedCat.id || c.name.trim().toLowerCase() === formattedCat.name.trim().toLowerCase()) 
+            ? { ...c, ...formattedCat, status_ativo: 1 } 
+            : c
+        );
+      }
+      return [...prev, formattedCat];
+    });
+
+    if (isSupabaseConfigured) {
+      try {
+        const saved = await dbSaveBarCategory(formattedCat);
+        if (saved) {
+          setCategories(prev => prev.map(c => 
+            (c.id === formattedCat.id || c.name.trim().toLowerCase() === formattedCat.name.trim().toLowerCase()) 
+              ? saved 
+              : c
+          ));
+        }
+      } catch (err) {
+        console.error('Erro ao salvar categoria no banco:', err);
+      }
+    }
+  };
+
+  // Handle Delete / Inactivate Category
+  const handleDeleteCategory = async (categoryId: string, categoryName?: string) => {
+    const targetCat = categories.find(c => c.id === categoryId || (categoryName && c.name.trim().toLowerCase() === categoryName.trim().toLowerCase()));
+    const targetName = targetCat ? targetCat.name.trim() : (categoryName ? categoryName.trim() : '');
+
+    // 1. Remove/Inactivate from categories state
+    setCategories(prev => prev.filter(c => 
+      c.id !== categoryId && (!targetName || c.name.trim().toLowerCase() !== targetName.toLowerCase())
+    ));
+
+    // 2. If products were assigned to this deleted category, reassign them to 'Outros'
+    if (targetName) {
+      setProducts(prev => {
+        const prodsToUpdate: BarProduct[] = [];
+        const nextList = prev.map(p => {
+          if (p.category && p.category.trim().toLowerCase() === targetName.toLowerCase()) {
+            const updated = { ...p, category: 'Outros' };
+            prodsToUpdate.push(updated);
+            return updated;
+          }
+          return p;
+        });
+
+        if (isSupabaseConfigured && prodsToUpdate.length > 0) {
+          prodsToUpdate.forEach(p => {
+            dbSaveBarProduct(p).catch(err => console.error('Erro ao reclassificar produto após exclusão de categoria:', err));
+          });
+        }
+
+        return nextList;
+      });
+    }
+
+    // 3. Persist category deletion to Supabase
+    if (isSupabaseConfigured) {
+      try {
+        await dbDeleteBarCategory(categoryId, targetName);
+      } catch (err) {
+        console.error('Erro ao excluir categoria do banco:', err);
+      }
+    }
+  };
+
   // Handle Stock Adjustment
   const handleAdjustStock = (newMovement: StockMovement) => {
     setMovements(prev => [newMovement, ...prev]);
@@ -456,58 +543,89 @@ export default function BarModule({
     }
   };
 
-  const openComandasCount = comandas.filter(c => c.status === 'Aberta').length;
-  const todayStr = new Date().toISOString().split('T')[0];
-  const todaySalesCount = sales.filter(s => s.date === todayStr && s.status !== 'Cancelada').length;
-  const lowStockCount = products.filter(p => p.stock <= 5).length;
+  // Handle Save Purchase (Entrada de Mercadoria com Custo Médio Ponderado)
+  const handleSavePurchase = async (purchase: BarPurchase) => {
+    setPurchases(prev => [purchase, ...prev]);
 
-  const barNavItems = [
-    {
-      id: 'comandas' as const,
-      label: 'Comandas de Consumo',
-      subtitle: 'Controle de mesas e cartões',
-      icon: Receipt,
-      count: openComandasCount,
-      badgeColor: 'bg-amber-500 text-white'
-    },
-    {
-      id: 'directSale' as const,
-      label: 'Venda Rápida / Balcão',
-      subtitle: 'PDV ágil sem abertura de comanda',
-      icon: Zap,
-      count: undefined,
-      badgeColor: ''
-    },
-    {
-      id: 'products' as const,
-      label: 'Cadastro de Produtos',
-      subtitle: 'Preços, categorias e cardápio',
-      icon: Package,
-      count: lowStockCount > 0 ? lowStockCount : undefined,
-      badgeColor: 'bg-red-500 text-white'
-    },
-    {
-      id: 'reports' as const,
-      label: 'Relatórios de Vendas',
-      subtitle: 'Histórico unificado e faturamento',
-      icon: BarChart3,
-      count: todaySalesCount > 0 ? todaySalesCount : undefined,
-      badgeColor: 'bg-emerald-600 text-white'
-    },
-    {
-      id: 'movements' as const,
-      label: 'Histórico de Estoque',
-      subtitle: 'Entradas, saídas e perdas',
-      icon: History,
-      count: undefined,
-      badgeColor: ''
+    // Recalcular estoque e custo médio ponderado em memória
+    setProducts(prevProducts => {
+      return prevProducts.map(prod => {
+        const item = purchase.items.find(i => i.productId === prod.id);
+        if (item) {
+          const currentStock = Math.max(0, prod.stock);
+          const currentCost = Math.max(0, prod.costPrice);
+          const buyQty = item.quantity;
+          const buyCost = item.costPrice;
+
+          let newAvg = buyCost;
+          if (currentStock > 0 && currentCost > 0) {
+            newAvg = ((currentStock * currentCost) + (buyQty * buyCost)) / (currentStock + buyQty);
+          }
+          newAvg = Math.round(newAvg * 100) / 100;
+
+          return {
+            ...prod,
+            stock: currentStock + buyQty,
+            costPrice: newAvg,
+            lastPurchasePrice: buyCost,
+            totalPurchasedQty: (prod.totalPurchasedQty || 0) + buyQty
+          };
+        }
+        return prod;
+      });
+    });
+
+    // Registrar movimentações em memória
+    const newMovements: StockMovement[] = purchase.items.map((item, idx) => ({
+      id: `mov-comp-${purchase.id}-${item.productId}-${idx}`,
+      productId: item.productId,
+      productName: item.productName,
+      type: 'Entrada (Compra)',
+      quantity: item.quantity,
+      unitCost: item.costPrice,
+      totalCost: item.totalCost,
+      purchaseId: purchase.id,
+      reason: `Compra ${purchase.code} - Fornecedor: ${purchase.supplier || 'Geral'}`,
+      createdAt: `${purchase.purchaseDate} ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`,
+      user: currentUser ? currentUser.name : 'Administrador'
+    }));
+    setMovements(prev => [...newMovements, ...prev]);
+
+    // Persistir no banco de dados Supabase
+    if (isSupabaseConfigured) {
+      try {
+        const result = await dbSaveBarPurchase(purchase);
+        if (result && result.updatedProducts && result.updatedProducts.length > 0) {
+          setProducts(prev => {
+            const map = new Map(result.updatedProducts.map(p => [p.id, p]));
+            return prev.map(p => map.get(p.id) || p);
+          });
+        }
+        // Recarregar histórico de estoque atualizado
+        const freshMovements = await dbGetStockMovements();
+        if (freshMovements && freshMovements.length > 0) {
+          setMovements(freshMovements);
+        }
+      } catch (err) {
+        console.error('Erro ao salvar compra no Supabase:', err);
+      }
     }
-  ];
+  };
+
+  // Handle Delete Purchase
+  const handleDeletePurchase = async (purchaseId: string) => {
+    setPurchases(prev => prev.filter(p => p.id !== purchaseId));
+    if (isSupabaseConfigured) {
+      await dbDeleteBarPurchase(purchaseId);
+    }
+  };
+
+  const openComandasCount = comandas.filter(c => c.status === 'Aberta').length;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Top Header */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-2xs">
+      {/* Clean Modern Header Bar */}
+      <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-2xs space-y-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -516,14 +634,14 @@ export default function BarModule({
               </span>
             </div>
             <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-              Gestão de Comandas & PDV
+              Gestão de Comandas
             </h1>
             <p className="text-xs text-slate-500 font-medium">
-              Controle de consumo, vendas rápidas no balcão, produtos e relatórios integrados.
+              Abertura de comandas por cliente, consumo contínuo e fechamento de conta.
             </p>
           </div>
 
-          {/* Switch Module Actions */}
+          {/* Module Switch Buttons */}
           <div className="flex items-center gap-2">
             <button
               onClick={onSwitchToQuadras}
@@ -543,128 +661,98 @@ export default function BarModule({
             </button>
           </div>
         </div>
+
+        {/* Bar Sub-Tabs Navigation */}
+        <div className="pt-3 border-t border-slate-100 flex items-center gap-2 overflow-x-auto scrollbar-thin">
+          {[
+            { id: 'comandas', label: `Comandas (${openComandasCount} abertas)`, icon: Receipt },
+            { id: 'directSale', label: 'Venda Rápida (Sem Comanda)', icon: Zap },
+            { id: 'products', label: 'Cadastro', icon: Package },
+            { id: 'purchases', label: `Compras & Entradas (${purchases.length})`, icon: ShoppingCart },
+            { id: 'reports', label: 'Relatórios de Vendas', icon: BarChart3 },
+            { id: 'movements', label: 'Histórico de Estoque', icon: History }
+          ].map(tab => {
+            const IconComp = tab.icon;
+            const isActive = activeBarTab === tab.id;
+
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveBarTab(tab.id as any)}
+                className={`px-4 py-2.5 rounded-2xl text-xs font-extrabold flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
+                  isActive
+                    ? 'bg-amber-500 text-white shadow-sm font-black'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/60'
+                }`}
+              >
+                <IconComp className={`h-4 w-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Main Responsive Layout with Vertical Side Menu */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* VERTICAL SIDEBAR MENU */}
-        <aside className="col-span-1 lg:col-span-3 space-y-3">
-          <div className="bg-white rounded-3xl p-4 border border-slate-200/80 shadow-2xs space-y-2">
-            <div className="px-3 py-2 border-b border-slate-100">
-              <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
-                Menu do Bar
-              </p>
-            </div>
+      {/* Bar Content Views */}
+      <div className="transition-all">
+        {activeBarTab === 'comandas' && (
+          <BarComandasManager
+            comandas={comandas}
+            products={products}
+            categories={categories}
+            onOpenComanda={handleOpenComanda}
+            onAddItemToComanda={handleAddItemToComanda}
+            onRemoveItemFromComanda={handleRemoveItemFromComanda}
+            onCloseComanda={handleCloseComanda}
+            onCancelComanda={handleCancelComanda}
+            onSwitchToDirectSale={() => setActiveBarTab('directSale')}
+          />
+        )}
 
-            <nav className="space-y-1.5" aria-label="Menu Lateral do Bar">
-              {barNavItems.map(item => {
-                const IconComp = item.icon;
-                const isActive = activeBarTab === item.id;
+        {activeBarTab === 'directSale' && (
+          <BarDirectSaleManager
+            products={products}
+            sales={sales}
+            onDirectSale={handleDirectSale}
+            onCancelSale={handleCancelSale}
+          />
+        )}
 
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setActiveBarTab(item.id)}
-                    className={`w-full group flex items-center justify-between p-3 rounded-2xl text-left transition-all cursor-pointer ${
-                      isActive
-                        ? 'bg-slate-900 text-white shadow-md shadow-slate-900/10'
-                        : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent hover:border-slate-200/60'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className={`p-2.5 rounded-xl transition ${
-                        isActive
-                          ? 'bg-amber-500 text-white shadow-sm'
-                          : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200 group-hover:text-slate-800'
-                      }`}>
-                        <IconComp className="h-4 w-4 shrink-0" />
-                      </div>
-                      <div className="truncate">
-                        <p className={`text-xs font-extrabold truncate ${isActive ? 'text-white' : 'text-slate-800'}`}>
-                          {item.label}
-                        </p>
-                        <p className={`text-[10px] truncate font-medium ${isActive ? 'text-slate-300' : 'text-slate-400'}`}>
-                          {item.subtitle}
-                        </p>
-                      </div>
-                    </div>
+        {activeBarTab === 'products' && (
+          <BarProductsManager
+            products={products}
+            categories={categories}
+            onSaveProduct={handleSaveProduct}
+            onDeleteProduct={handleDeleteProduct}
+            onAdjustStock={handleAdjustStock}
+            onSwitchToPurchases={() => setActiveBarTab('purchases')}
+            onSaveCategory={handleSaveCategory}
+            onDeleteCategory={handleDeleteCategory}
+          />
+        )}
 
-                    {item.count !== undefined && item.count > 0 && (
-                      <span className={`shrink-0 ml-2 px-2 py-0.5 rounded-full text-[10px] font-black ${
-                        isActive ? 'bg-amber-500 text-white' : item.badgeColor
-                      }`}>
-                        {item.count}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </nav>
+        {activeBarTab === 'purchases' && (
+          <BarPurchasesManager
+            products={products}
+            purchases={purchases}
+            onSavePurchase={handleSavePurchase}
+            onDeletePurchase={handleDeletePurchase}
+          />
+        )}
 
-            {/* Quick Summary Card inside Vertical Menu */}
-            <div className="mt-4 pt-3 border-t border-slate-100 space-y-2">
-              <div className="bg-amber-50 border border-amber-200/60 p-3 rounded-2xl flex items-center justify-between text-amber-950">
-                <div className="space-y-0.5">
-                  <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Comandas Abertas</p>
-                  <p className="text-base font-black text-amber-900">{openComandasCount}</p>
-                </div>
-                <div className="p-2 bg-amber-500 text-white rounded-xl">
-                  <Receipt className="h-4 w-4" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </aside>
+        {activeBarTab === 'reports' && (
+          <BarSalesReports
+            sales={sales}
+            products={products}
+            onCancelSale={handleCancelSale}
+          />
+        )}
 
-        {/* MAIN VIEW CONTENT AREA */}
-        <main className="col-span-1 lg:col-span-9">
-          <div className="transition-all">
-            {activeBarTab === 'comandas' && (
-              <BarComandasManager
-                comandas={comandas}
-                products={products}
-                onOpenComanda={handleOpenComanda}
-                onAddItemToComanda={handleAddItemToComanda}
-                onRemoveItemFromComanda={handleRemoveItemFromComanda}
-                onCloseComanda={handleCloseComanda}
-                onCancelComanda={handleCancelComanda}
-                onSwitchToDirectSale={() => setActiveBarTab('directSale')}
-              />
-            )}
-
-            {activeBarTab === 'directSale' && (
-              <BarDirectSaleManager
-                products={products}
-                sales={sales}
-                onDirectSale={handleDirectSale}
-                onCancelSale={handleCancelSale}
-              />
-            )}
-
-            {activeBarTab === 'products' && (
-              <BarProductsManager
-                products={products}
-                onSaveProduct={handleSaveProduct}
-                onDeleteProduct={handleDeleteProduct}
-                onAdjustStock={handleAdjustStock}
-              />
-            )}
-
-            {activeBarTab === 'reports' && (
-              <BarSalesReports
-                sales={sales}
-                products={products}
-                onCancelSale={handleCancelSale}
-              />
-            )}
-
-            {activeBarTab === 'movements' && (
-              <BarStockMovements
-                movements={movements}
-              />
-            )}
-          </div>
-        </main>
+        {activeBarTab === 'movements' && (
+          <BarStockMovements
+            movements={movements}
+          />
+        )}
       </div>
     </div>
   );
