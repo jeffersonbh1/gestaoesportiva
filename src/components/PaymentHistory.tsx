@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Booking, Court, PaymentStatus } from '../types';
 import { formatCurrency, getBrasiliaTodayDate, shiftDateString } from '../utils';
 import { 
@@ -15,9 +15,25 @@ import {
   Copy,
   Printer,
   X,
-  Trash2
+  Trash2,
+  BarChart3,
+  PieChart as PieIcon,
+  TrendingUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  PieChart,
+  Pie,
+  Cell
+} from 'recharts';
 
 interface PaymentHistoryProps {
   bookings: Booking[];
@@ -26,12 +42,34 @@ interface PaymentHistoryProps {
   onDeleteBooking?: (bookingId: string) => void;
 }
 
+const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+const formatMonthYear = (ym: string) => {
+  if (!ym || !ym.includes('-')) return ym;
+  const [y, m] = ym.split('-');
+  const monthIdx = parseInt(m, 10) - 1;
+  const shortYear = y.slice(2);
+  return `${MONTH_NAMES[monthIdx] || m}/${shortYear}`;
+};
+
+const SPORT_COLORS: { [key: string]: string } = {
+  'Futevôlei': '#10b981',
+  'Beach Tennis': '#0ea5e9',
+  'Vôlei de Praia': '#f59e0b',
+  'Funcional': '#8b5cf6',
+  'Outro': '#64748b',
+};
+
+const DEFAULT_CHART_COLORS = ['#10b981', '#0ea5e9', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#64748b'];
+
 export default function PaymentHistory({ bookings, courts, onUpdatePaymentStatus, onDeleteBooking }: PaymentHistoryProps) {
   // Filters state
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'Todos' | 'Pago' | 'Pendente'>('Todos');
   const [courtFilter, setCourtFilter] = useState('Todos');
-  const [dateRange, setDateRange] = useState<'Todos' | 'Hoje' | 'Ontem' | '7dias'>('Todos');
+  const [datePreset, setDatePreset] = useState<'todos' | 'hoje' | 'ontem' | '7dias' | '30dias' | 'este_mes' | 'mes_anterior' | 'personalizado'>('todos');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   
   // Receipt modal state
   const [selectedReceipt, setSelectedReceipt] = useState<Booking | null>(null);
@@ -45,11 +83,69 @@ export default function PaymentHistory({ bookings, courts, onUpdatePaymentStatus
   const getTodayDate = () => getBrasiliaTodayDate();
   const getYesterdayDate = () => shiftDateString(getBrasiliaTodayDate(), -1);
 
+  // Apply quick date preset
+  const handleApplyPreset = (preset: 'todos' | 'hoje' | 'ontem' | '7dias' | '30dias' | 'este_mes' | 'mes_anterior') => {
+    setDatePreset(preset);
+    const today = getTodayDate();
+
+    if (preset === 'todos') {
+      setStartDate('');
+      setEndDate('');
+    } else if (preset === 'hoje') {
+      setStartDate(today);
+      setEndDate(today);
+    } else if (preset === 'ontem') {
+      const yesterday = getYesterdayDate();
+      setStartDate(yesterday);
+      setEndDate(yesterday);
+    } else if (preset === '7dias') {
+      setStartDate(shiftDateString(today, -6));
+      setEndDate(today);
+    } else if (preset === '30dias') {
+      setStartDate(shiftDateString(today, -29));
+      setEndDate(today);
+    } else if (preset === 'este_mes') {
+      const [y, m] = today.split('-').map(Number);
+      const start = `${y}-${String(m).padStart(2, '0')}-01`;
+      const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      const end = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      setStartDate(start);
+      setEndDate(end);
+    } else if (preset === 'mes_anterior') {
+      const [y, m] = today.split('-').map(Number);
+      const prevDate = new Date(Date.UTC(y, m - 2, 1));
+      const py = prevDate.getUTCFullYear();
+      const pm = prevDate.getUTCMonth() + 1;
+      const start = `${py}-${String(pm).padStart(2, '0')}-01`;
+      const lastDay = new Date(Date.UTC(py, pm, 0)).getUTCDate();
+      const end = `${py}-${String(pm).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      setStartDate(start);
+      setEndDate(end);
+    }
+  };
+
+  const handleCustomDateChange = (start: string, end: string) => {
+    setStartDate(start);
+    setEndDate(end);
+    setDatePreset('personalizado');
+  };
+
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('Todos');
+    setCourtFilter('Todos');
+    setDatePreset('todos');
+    setStartDate('');
+    setEndDate('');
+  };
+
   // Filter logic
   const filteredBookings = bookings.filter(b => {
     // 1. Search term
-    const matchesSearch = b.customerName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          b.customerPhone.includes(searchTerm);
+    const matchesSearch = !searchTerm.trim() || 
+                          b.customerName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          b.customerPhone.includes(searchTerm) ||
+                          (b.sport || '').toLowerCase().includes(searchTerm.toLowerCase());
     
     // 2. Status
     const matchesStatus = statusFilter === 'Todos' || b.paymentStatus === statusFilter;
@@ -59,17 +155,8 @@ export default function PaymentHistory({ bookings, courts, onUpdatePaymentStatus
 
     // 4. Date Range
     let matchesDate = true;
-    if (dateRange === 'Hoje') {
-      matchesDate = b.date === getTodayDate();
-    } else if (dateRange === 'Ontem') {
-      matchesDate = b.date === getYesterdayDate();
-    } else if (dateRange === '7dias') {
-      const bDate = new Date(b.date);
-      const reference = new Date(getTodayDate());
-      const diffTime = Math.abs(reference.getTime() - bDate.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      matchesDate = diffDays <= 7;
-    }
+    if (startDate && b.date < startDate) matchesDate = false;
+    if (endDate && b.date > endDate) matchesDate = false;
 
     return matchesSearch && matchesStatus && matchesCourt && matchesDate;
   });
@@ -83,6 +170,121 @@ export default function PaymentHistory({ bookings, courts, onUpdatePaymentStatus
     .filter(b => b.paymentStatus === 'Pendente')
     .reduce((sum, b) => sum + b.totalValue, 0);
 
+  // Group monthly volume for BarChart
+  const monthlyChartData = useMemo(() => {
+    const map: { [key: string]: { monthKey: string; monthLabel: string; pago: number; pendente: number; total: number; count: number } } = {};
+
+    for (const b of filteredBookings) {
+      if (!b.date) continue;
+      const monthKey = b.date.slice(0, 7); // "YYYY-MM"
+      if (!map[monthKey]) {
+        map[monthKey] = {
+          monthKey,
+          monthLabel: formatMonthYear(monthKey),
+          pago: 0,
+          pendente: 0,
+          total: 0,
+          count: 0
+        };
+      }
+      const val = Number(b.totalValue) || 0;
+      map[monthKey].total += val;
+      if (b.paymentStatus === 'Pago') {
+        map[monthKey].pago += val;
+      } else {
+        map[monthKey].pendente += val;
+      }
+      map[monthKey].count += 1;
+    }
+
+    return Object.values(map).sort((a, b) => a.monthKey.localeCompare(b.monthKey));
+  }, [filteredBookings]);
+
+  // Group values by sport for PieChart
+  const sportsChartData = useMemo(() => {
+    const map: { [key: string]: { name: string; value: number; pago: number; pendente: number; count: number } } = {};
+    let totalAll = 0;
+
+    for (const b of filteredBookings) {
+      const sportName = b.sport || 'Futevôlei';
+      if (!map[sportName]) {
+        map[sportName] = { name: sportName, value: 0, pago: 0, pendente: 0, count: 0 };
+      }
+      const val = Number(b.totalValue) || 0;
+      map[sportName].value += val;
+      if (b.paymentStatus === 'Pago') {
+        map[sportName].pago += val;
+      } else {
+        map[sportName].pendente += val;
+      }
+      map[sportName].count += 1;
+      totalAll += val;
+    }
+
+    return Object.values(map)
+      .sort((a, b) => b.value - a.value)
+      .map((item, idx) => ({
+        ...item,
+        color: SPORT_COLORS[item.name] || DEFAULT_CHART_COLORS[idx % DEFAULT_CHART_COLORS.length],
+        percent: totalAll > 0 ? (item.value / totalAll) * 100 : 0
+      }));
+  }, [filteredBookings]);
+
+  // Custom tooltips for recharts
+  const CustomBarTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl border border-slate-700 text-xs space-y-1.5 min-w-[170px]">
+          <p className="font-bold text-slate-200 border-b border-slate-700 pb-1 flex justify-between items-center">
+            <span>{data.monthLabel}</span>
+            <span className="text-[10px] text-slate-400 font-normal">{data.count} agendamento(s)</span>
+          </p>
+          <div className="flex justify-between items-center text-emerald-400">
+            <span>Recebido (Pago):</span>
+            <span className="font-bold font-mono">{formatCurrency(data.pago)}</span>
+          </div>
+          <div className="flex justify-between items-center text-blue-400">
+            <span>Pendente:</span>
+            <span className="font-bold font-mono">{formatCurrency(data.pendente)}</span>
+          </div>
+          <div className="flex justify-between items-center pt-1 border-t border-slate-800 text-white font-bold">
+            <span>Total:</span>
+            <span className="font-mono text-emerald-300">{formatCurrency(data.total)}</span>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const CustomPieTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl border border-slate-700 text-xs space-y-1 min-w-[160px]">
+          <p className="font-bold text-slate-200 border-b border-slate-700 pb-1 flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: data.color }} />
+            <span className="truncate">{data.name}</span>
+          </p>
+          <div className="flex justify-between items-center text-slate-300 pt-0.5">
+            <span>Valor:</span>
+            <span className="font-bold font-mono text-white">{formatCurrency(data.value)}</span>
+          </div>
+          <div className="flex justify-between items-center text-slate-400">
+            <span>Participação:</span>
+            <span className="font-semibold text-emerald-400">{data.percent.toFixed(1)}%</span>
+          </div>
+          <div className="flex justify-between items-center text-slate-400 text-[10px]">
+            <span>Agendamentos:</span>
+            <span>{data.count}</span>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
   const copyPixKey = () => {
     setCopiedLink(true);
     navigator.clipboard.writeText('arena.volei.pix@pagamentos.com');
@@ -94,104 +296,307 @@ export default function PaymentHistory({ bookings, courts, onUpdatePaymentStatus
     setTimeout(() => setPrinting(false), 2000);
   };
 
+  const isAnyFilterActive = searchTerm !== '' || statusFilter !== 'Todos' || courtFilter !== 'Todos' || startDate !== '' || endDate !== '' || datePreset !== 'todos';
+
   return (
     <div id="payment-history-view" className="space-y-6">
       
-      {/* Financial Metrics Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
-            <CheckCircle className="h-6 w-6" />
+      {/* Financial Metrics Strip - Responsive Card Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
+        {/* Recebido (Pago) */}
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3.5 sm:gap-4 min-w-0 transition hover:shadow-md">
+          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl shrink-0">
+            <CheckCircle className="h-5 w-5 sm:h-6 sm:w-6" />
           </div>
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Recebido (Pago)</span>
-            <span className="text-xl font-bold text-slate-900 tracking-tight">{formatCurrency(totalPaid)}</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-blue-50 text-blue-500 rounded-xl">
-            <Clock className="h-6 w-6" />
-          </div>
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">A Receber (Pendente)</span>
-            <span className="text-xl font-bold text-slate-900 tracking-tight">{formatCurrency(totalPending)}</span>
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider block truncate" title="Recebido (Pago)">
+              Recebido (Pago)
+            </span>
+            <span 
+              className="text-lg sm:text-xl md:text-2xl font-black text-slate-900 tracking-tight block truncate mt-0.5"
+              title={formatCurrency(totalPaid)}
+            >
+              {formatCurrency(totalPaid)}
+            </span>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-slate-100 text-slate-600 rounded-xl">
-            <DollarSign className="h-6 w-6" />
+        {/* A Receber (Pendente) */}
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3.5 sm:gap-4 min-w-0 transition hover:shadow-md">
+          <div className="p-3 bg-blue-50 text-blue-500 rounded-2xl shrink-0">
+            <Clock className="h-5 w-5 sm:h-6 sm:w-6" />
           </div>
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Filtrado</span>
-            <span className="text-xl font-bold text-slate-900 tracking-tight">{formatCurrency(totalPaid + totalPending)}</span>
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider block truncate" title="A Receber (Pendente)">
+              A Receber (Pendente)
+            </span>
+            <span 
+              className="text-lg sm:text-xl md:text-2xl font-black text-slate-900 tracking-tight block truncate mt-0.5"
+              title={formatCurrency(totalPending)}
+            >
+              {formatCurrency(totalPending)}
+            </span>
+          </div>
+        </div>
+
+        {/* Total Filtrado */}
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3.5 sm:gap-4 min-w-0 sm:col-span-2 lg:col-span-1 transition hover:shadow-md">
+          <div className="p-3 bg-slate-100 text-slate-700 rounded-2xl shrink-0">
+            <DollarSign className="h-5 w-5 sm:h-6 sm:w-6" />
+          </div>
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider block truncate" title="Total Filtrado">
+              Total Filtrado
+            </span>
+            <span 
+              className="text-lg sm:text-xl md:text-2xl font-black text-slate-900 tracking-tight block truncate mt-0.5"
+              title={formatCurrency(totalPaid + totalPending)}
+            >
+              {formatCurrency(totalPaid + totalPending)}
+            </span>
           </div>
         </div>
       </div>
 
       {/* Filter Options Control Bar */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row gap-3">
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        {/* Row 1: Search & Quick Presets */}
+        <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
           {/* Search bar */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-3.5 h-4.5 w-4.5 text-slate-400" />
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input 
               type="text"
-              placeholder="Buscar por cliente ou telefone..."
+              placeholder="Buscar por cliente, telefone ou esporte..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full pl-10 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
             />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                title="Limpar busca"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
 
-          {/* Quick Dates */}
-          <div className="flex gap-1 bg-slate-100 p-1 rounded-xl shrink-0">
-            {(['Todos', 'Hoje', 'Ontem', '7dias'] as const).map((opt) => (
+          {/* Quick Date Presets */}
+          <div className="flex flex-wrap gap-1 bg-slate-100 p-1 rounded-xl shrink-0">
+            {[
+              { id: 'todos', label: 'Todos' },
+              { id: 'hoje', label: 'Hoje' },
+              { id: 'ontem', label: 'Ontem' },
+              { id: '7dias', label: '7 dias' },
+              { id: '30dias', label: '30 dias' },
+              { id: 'este_mes', label: 'Este Mês' },
+              { id: 'mes_anterior', label: 'Mês Passado' },
+            ].map((opt) => (
               <button
-                key={opt}
-                onClick={() => setDateRange(opt)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                  dateRange === opt 
-                    ? 'bg-white text-slate-800 shadow-xs' 
-                    : 'text-slate-500 hover:text-slate-800'
+                key={opt.id}
+                onClick={() => handleApplyPreset(opt.id as any)}
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                  datePreset === opt.id 
+                    ? 'bg-white text-slate-900 shadow-xs font-bold' 
+                    : 'text-slate-500 hover:text-slate-900'
                 }`}
               >
-                {opt === 'Todos' ? 'Histórico' : opt === '7dias' ? 'Últimos 7 dias' : opt}
+                {opt.label}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Dropdowns Filters Row */}
-        <div className="flex flex-wrap gap-3 pt-3 border-t border-slate-100">
-          {/* Status Filter */}
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-slate-400 font-bold uppercase tracking-wider">Status:</span>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
-              className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-semibold text-slate-700 focus:outline-none"
-            >
-              <option value="Todos">Todos</option>
-              <option value="Pago">Pago</option>
-              <option value="Pendente">Pendente</option>
-            </select>
+        {/* Row 2: Date Pickers and Dropdowns */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Custom Date Filter */}
+            <div className="flex items-center gap-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5">
+              <Calendar className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+              <span className="text-slate-400 font-bold uppercase text-[10px]">De:</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => handleCustomDateChange(e.target.value, endDate)}
+                className="bg-transparent text-xs font-semibold text-slate-700 focus:outline-none cursor-pointer"
+                title="Data inicial"
+              />
+              <span className="text-slate-400 font-bold uppercase text-[10px] ml-1">Até:</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => handleCustomDateChange(startDate, e.target.value)}
+                className="bg-transparent text-xs font-semibold text-slate-700 focus:outline-none cursor-pointer"
+                title="Data final"
+              />
+            </div>
+
+            {/* Status Filter */}
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Status:</span>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as any)}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 font-semibold text-slate-700 focus:outline-none text-xs cursor-pointer"
+              >
+                <option value="Todos">Todos os Status</option>
+                <option value="Pago">Pago</option>
+                <option value="Pendente">Pendente</option>
+              </select>
+            </div>
+
+            {/* Court Filter */}
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Quadra:</span>
+              <select
+                value={courtFilter}
+                onChange={(e) => setCourtFilter(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 font-semibold text-slate-700 focus:outline-none text-xs cursor-pointer"
+              >
+                <option value="Todos">Todas as Quadras</option>
+                {courts.map((court) => (
+                  <option key={court.id} value={court.id}>{court.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          {/* Court Filter */}
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-slate-400 font-bold uppercase tracking-wider">Quadra:</span>
-            <select
-              value={courtFilter}
-              onChange={(e) => setCourtFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-semibold text-slate-700 focus:outline-none"
+          {/* Reset Filters button */}
+          {isAnyFilterActive && (
+            <button
+              onClick={handleClearFilters}
+              className="text-xs font-bold text-slate-500 hover:text-rose-600 transition flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-rose-50 cursor-pointer shrink-0"
+              title="Limpar todos os filtros"
             >
-              <option value="Todos">Todas as Quadras</option>
-              {courts.map((court) => (
-                <option key={court.id} value={court.id}>{court.name}</option>
-              ))}
-            </select>
+              <X className="h-3.5 w-3.5" />
+              Limpar filtros
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Charts Section: Volume por Mês & Valores por Esporte */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Gráfico 1: Volume Financeiro por Mês */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-emerald-500" />
+                Volume Financeiro por Mês
+              </h3>
+              <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                Comparativo de valores pagos e pendentes por mês
+              </p>
+            </div>
+            <div className="flex items-center gap-3 text-[11px] font-semibold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-100">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" />
+                Pago
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm bg-blue-500 inline-block" />
+                Pendente
+              </span>
+            </div>
+          </div>
+
+          <div className="h-64 w-full pt-2">
+            {monthlyChartData.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs">
+                <BarChart3 className="h-8 w-8 mb-2 text-slate-300" />
+                <span>Nenhum dado financeiro para o período selecionado</span>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis 
+                    dataKey="monthLabel" 
+                    tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }}
+                    axisLine={{ stroke: '#e2e8f0' }}
+                    tickLine={false}
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 10, fill: '#94a3b8' }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(val) => `R$${val >= 1000 ? `${(val/1000).toFixed(0)}k` : val}`}
+                  />
+                  <Tooltip content={<CustomBarTooltip />} />
+                  <Bar dataKey="pago" name="Pago" fill="#10b981" radius={[0, 0, 0, 0]} stackId="a" />
+                  <Bar dataKey="pendente" name="Pendente" fill="#3b82f6" radius={[4, 4, 0, 0]} stackId="a" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        {/* Gráfico 2: Valores por Esporte */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <PieIcon className="h-4 w-4 text-blue-500" />
+                Valores por Esporte
+              </h3>
+              <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                Distribuição e receita gerada por modalidade
+              </p>
+            </div>
+            <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-100">
+              Total: {formatCurrency(totalPaid + totalPending)}
+            </span>
+          </div>
+
+          <div className="h-64 w-full flex flex-col sm:flex-row items-center justify-between gap-3">
+            {sportsChartData.length === 0 ? (
+              <div className="h-full w-full flex flex-col items-center justify-center text-slate-400 text-xs">
+                <PieIcon className="h-8 w-8 mb-2 text-slate-300" />
+                <span>Nenhum dado por esporte no período selecionado</span>
+              </div>
+            ) : (
+              <>
+                <div className="h-44 sm:h-full w-full sm:w-1/2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={sportsChartData}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={46}
+                        outerRadius={72}
+                        paddingAngle={3}
+                      >
+                        {sportsChartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<CustomPieTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="w-full sm:w-1/2 flex flex-col justify-center space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                  {sportsChartData.map((item) => (
+                    <div key={item.name} className="flex items-center justify-between text-xs p-1.5 rounded-xl hover:bg-slate-50 transition border border-transparent hover:border-slate-100">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                        <span className="font-semibold text-slate-700 truncate text-xs">{item.name}</span>
+                      </div>
+                      <div className="text-right shrink-0 ml-2">
+                        <span className="font-bold font-mono text-slate-900 block text-xs">{formatCurrency(item.value)}</span>
+                        <span className="text-[10px] text-slate-400 font-medium">{item.percent.toFixed(1)}%</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
