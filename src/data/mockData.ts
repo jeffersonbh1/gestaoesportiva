@@ -239,6 +239,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     email: 'lucas.mendes@arena.com',
     pricePerClass: 120,
     status: 'Ativo',
+    ind_cadastro_ativo: 1,
     notes: 'Especialista em treino funcional de areia e técnica de futevôlei'
   },
   {
@@ -249,6 +250,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     email: 'carolina.silva@arena.com',
     pricePerClass: 110,
     status: 'Ativo',
+    ind_cadastro_ativo: 1,
     notes: 'Ex-atleta profissional de Beach Tennis'
   }
 ];

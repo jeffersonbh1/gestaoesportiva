@@ -510,7 +510,10 @@ export default function App() {
 
     if (isSupabaseConfigured) {
       try {
-        await dbSaveStudent(student);
+        const saved = await dbSaveStudent(student);
+        if (saved) {
+          setStudents((prev) => prev.map((s) => (s.id === student.id || s.id === saved.id ? saved : s)));
+        }
         const updated = await dbGetStudents();
         if (updated.length > 0) setStudents(updated);
         setDbError(null);
@@ -1161,9 +1164,11 @@ export default function App() {
                 onDeleteCourtType={handleDeleteCourtType}
                 teachers={teachers}
                 onAddTeacher={handleAddTeacher}
+                onSaveTeacher={handleAddTeacher}
                 onDeleteTeacher={handleDeleteTeacher}
                 students={students}
                 onAddStudent={handleAddStudent}
+                onSaveStudent={handleAddStudent}
                 onDeleteStudent={handleDeleteStudent}
                 isAdmin={currentUser.role === 'Administrador'}
               />

@@ -23,7 +23,9 @@ import {
   BookOpen,
   Layers,
   Pencil,
-  Trophy
+  Trophy,
+  Search,
+  X
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -45,9 +47,11 @@ interface CourtManagerProps {
   onDeleteCourtType?: (id: string, name?: string) => void;
   teachers?: Teacher[];
   onAddTeacher?: (teacher: Teacher) => void;
+  onSaveTeacher?: (teacher: Teacher) => void;
   onDeleteTeacher?: (id: string) => void;
   students?: Student[];
   onAddStudent?: (student: Student) => void;
+  onSaveStudent?: (student: Student) => void;
   onDeleteStudent?: (id: string) => void;
   isAdmin?: boolean;
 }
@@ -70,9 +74,11 @@ export default function CourtManager({
   onDeleteCourtType,
   teachers = INITIAL_TEACHERS,
   onAddTeacher,
+  onSaveTeacher,
   onDeleteTeacher,
   students = INITIAL_STUDENTS,
   onAddStudent,
+  onSaveStudent,
   onDeleteStudent,
   isAdmin = true
 }: CourtManagerProps) {
@@ -137,8 +143,9 @@ export default function CourtManager({
   const [rentalName, setRentalName] = useState('');
   const [rentalDescription, setRentalDescription] = useState('');
 
-  // New Teacher form state
+  // Teacher form & edit state
   const [showAddTeacherForm, setShowAddTeacherForm] = useState(false);
+  const [editingTeacher, setEditingTeacher] = useState<Teacher | null>(null);
   const [teacherName, setTeacherName] = useState('');
   const [teacherPhone, setTeacherPhone] = useState('');
   const [teacherSport, setTeacherSport] = useState<SportType>('Futevôlei');
@@ -147,8 +154,9 @@ export default function CourtManager({
   const [teacherStatus, setTeacherStatus] = useState<'Ativo' | 'Inativo'>('Ativo');
   const [teacherNotes, setTeacherNotes] = useState('');
 
-  // New Student form state
+  // Student form & edit state
   const [showAddStudentForm, setShowAddStudentForm] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [studentName, setStudentName] = useState('');
   const [studentPhone, setStudentPhone] = useState('');
   const [studentSport, setStudentSport] = useState<SportType>('Futevôlei');
@@ -156,6 +164,56 @@ export default function CourtManager({
   const [studentLevel, setStudentLevel] = useState<'Iniciante' | 'Intermediário' | 'Avançado'>('Iniciante');
   const [studentFee, setStudentFee] = useState(240);
   const [studentStatus, setStudentStatus] = useState<'Ativo' | 'Inativo'>('Ativo');
+  const [studentNotes, setStudentNotes] = useState('');
+  const [studentSearchTerm, setStudentSearchTerm] = useState('');
+
+  const handleStartEditTeacher = (teacher: Teacher) => {
+    setEditingTeacher(teacher);
+    setTeacherName(teacher.name);
+    setTeacherPhone(teacher.phone);
+    setTeacherSport((teacher.sport as SportType) || 'Futevôlei');
+    setTeacherEmail(teacher.email || '');
+    setTeacherPrice(teacher.pricePerClass || 120);
+    setTeacherStatus(teacher.status || 'Ativo');
+    setTeacherNotes(teacher.notes || '');
+    setShowAddTeacherForm(true);
+  };
+
+  const handleCancelTeacher = () => {
+    setEditingTeacher(null);
+    setTeacherName('');
+    setTeacherPhone('');
+    setTeacherEmail('');
+    setTeacherPrice(120);
+    setTeacherStatus('Ativo');
+    setTeacherNotes('');
+    setShowAddTeacherForm(false);
+  };
+
+  const handleStartEditStudent = (student: Student) => {
+    setEditingStudent(student);
+    setStudentName(student.name);
+    setStudentPhone(student.phone);
+    setStudentSport((student.sport as SportType) || 'Futevôlei');
+    setStudentTeacherId(student.teacherId || '');
+    setStudentLevel(student.level || 'Iniciante');
+    setStudentFee(student.monthlyFee !== undefined && student.monthlyFee !== null ? Number(student.monthlyFee) : 240);
+    setStudentStatus(student.status || 'Ativo');
+    setStudentNotes(student.notes || '');
+    setShowAddStudentForm(true);
+  };
+
+  const handleCancelStudent = () => {
+    setEditingStudent(null);
+    setStudentName('');
+    setStudentPhone('');
+    setStudentTeacherId('');
+    setStudentLevel('Iniciante');
+    setStudentFee(240);
+    setStudentStatus('Ativo');
+    setStudentNotes('');
+    setShowAddStudentForm(false);
+  };
 
   const handleCreateRentalType = (e: React.FormEvent) => {
     e.preventDefault();
@@ -234,50 +292,96 @@ export default function CourtManager({
     setShowAddCourtTypeForm(false);
   };
 
-  const handleCreateTeacher = (e: React.FormEvent) => {
+  const handleSaveTeacherSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!teacherName.trim() || !teacherPhone.trim()) return;
-    const newTeacher: Teacher = {
-      id: `teacher-${Date.now()}`,
-      name: teacherName.trim(),
-      phone: teacherPhone.trim(),
-      sport: teacherSport,
-      email: teacherEmail.trim() || undefined,
-      pricePerClass: teacherPrice > 0 ? teacherPrice : undefined,
-      status: teacherStatus,
-      notes: teacherNotes.trim() || undefined
-    };
-    onAddTeacher?.(newTeacher);
-    setTeacherName('');
-    setTeacherPhone('');
-    setTeacherEmail('');
-    setTeacherPrice(120);
-    setTeacherNotes('');
-    setShowAddTeacherForm(false);
+    
+    if (editingTeacher) {
+      const updatedTeacher: Teacher = {
+        ...editingTeacher,
+        name: teacherName.trim(),
+        phone: teacherPhone.trim(),
+        sport: teacherSport,
+        email: teacherEmail.trim() || undefined,
+        pricePerClass: teacherPrice > 0 ? teacherPrice : undefined,
+        status: teacherStatus,
+        ind_cadastro_ativo: editingTeacher.ind_cadastro_ativo !== undefined ? editingTeacher.ind_cadastro_ativo : 1,
+        notes: teacherNotes.trim() || undefined
+      };
+      if (onSaveTeacher) {
+        onSaveTeacher(updatedTeacher);
+      } else {
+        onAddTeacher?.(updatedTeacher);
+      }
+    } else {
+      const newTeacher: Teacher = {
+        id: `teacher-${Date.now()}`,
+        name: teacherName.trim(),
+        phone: teacherPhone.trim(),
+        sport: teacherSport,
+        email: teacherEmail.trim() || undefined,
+        pricePerClass: teacherPrice > 0 ? teacherPrice : undefined,
+        status: teacherStatus,
+        ind_cadastro_ativo: 1,
+        notes: teacherNotes.trim() || undefined
+      };
+      if (onSaveTeacher) {
+        onSaveTeacher(newTeacher);
+      } else {
+        onAddTeacher?.(newTeacher);
+      }
+    }
+    
+    handleCancelTeacher();
   };
 
-  const handleCreateStudent = (e: React.FormEvent) => {
+  const handleSaveStudentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!studentName.trim() || !studentPhone.trim()) return;
     const teacherObj = (teachers || []).find(t => t.id === studentTeacherId);
-    const newStudent: Student = {
-      id: `student-${Date.now()}`,
-      name: studentName.trim(),
-      phone: studentPhone.trim(),
-      sport: studentSport,
-      teacherId: teacherObj?.id,
-      teacherName: teacherObj?.name,
-      level: studentLevel,
-      status: studentStatus,
-      monthlyFee: studentFee > 0 ? studentFee : undefined
-    };
-    onAddStudent?.(newStudent);
-    setStudentName('');
-    setStudentPhone('');
-    setStudentTeacherId('');
-    setStudentLevel('Iniciante');
-    setStudentFee(240);
-    setShowAddStudentForm(false);
+    const feeNumber = Number(studentFee) >= 0 ? Number(studentFee) : 240;
+    
+    if (editingStudent) {
+      const updatedStudent: Student = {
+        ...editingStudent,
+        name: studentName.trim(),
+        phone: studentPhone.trim(),
+        sport: studentSport,
+        teacherId: teacherObj?.id || (studentTeacherId ? studentTeacherId : undefined),
+        teacherName: teacherObj?.name || (editingStudent.teacherId === studentTeacherId ? editingStudent.teacherName : undefined),
+        level: studentLevel,
+        status: studentStatus,
+        ind_cadastro_ativo: editingStudent.ind_cadastro_ativo !== undefined ? editingStudent.ind_cadastro_ativo : 1,
+        monthlyFee: feeNumber,
+        notes: studentNotes.trim() || undefined
+      };
+      if (onSaveStudent) {
+        onSaveStudent(updatedStudent);
+      } else {
+        onAddStudent?.(updatedStudent);
+      }
+    } else {
+      const newStudent: Student = {
+        id: `student-${Date.now()}`,
+        name: studentName.trim(),
+        phone: studentPhone.trim(),
+        sport: studentSport,
+        teacherId: teacherObj?.id || (studentTeacherId ? studentTeacherId : undefined),
+        teacherName: teacherObj?.name,
+        level: studentLevel,
+        status: studentStatus,
+        ind_cadastro_ativo: 1,
+        monthlyFee: feeNumber,
+        notes: studentNotes.trim() || undefined
+      };
+      if (onSaveStudent) {
+        onSaveStudent(newStudent);
+      } else {
+        onAddStudent?.(newStudent);
+      }
+    }
+
+    handleCancelStudent();
   };
 
   return (
@@ -1065,7 +1169,14 @@ export default function CourtManager({
             </div>
             {isAdmin && (
               <button
-                onClick={() => setShowAddTeacherForm(!showAddTeacherForm)}
+                onClick={() => {
+                  if (showAddTeacherForm) {
+                    handleCancelTeacher();
+                  } else {
+                    setEditingTeacher(null);
+                    setShowAddTeacherForm(true);
+                  }
+                }}
                 className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition flex items-center gap-2 cursor-pointer shadow-sm"
               >
                 <Plus className="h-4 w-4" />
@@ -1074,15 +1185,35 @@ export default function CourtManager({
             )}
           </div>
 
-          {/* Add Teacher Form */}
+          {/* Teacher Form (Add or Edit) */}
           {showAddTeacherForm && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm max-w-2xl"
             >
-              <h4 className="font-bold text-slate-950 mb-4 text-xs uppercase tracking-wider">Cadastrar Novo Professor</h4>
-              <form onSubmit={handleCreateTeacher} className="space-y-4">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-bold text-slate-950 text-xs uppercase tracking-wider flex items-center gap-2">
+                  {editingTeacher ? (
+                    <>
+                      <Pencil className="h-3.5 w-3.5 text-blue-500" />
+                      Editar Cadastro do Professor
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-3.5 w-3.5 text-blue-500" />
+                      Cadastrar Novo Professor
+                    </>
+                  )}
+                </h4>
+                {editingTeacher && (
+                  <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                    Editando: {editingTeacher.name}
+                  </span>
+                )}
+              </div>
+
+              <form onSubmit={handleSaveTeacherSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-bold text-slate-500 block mb-1">Nome do Professor</label>
@@ -1131,7 +1262,7 @@ export default function CourtManager({
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="text-xs font-bold text-slate-500 block mb-1">E-mail (Opcional)</label>
                     <input
@@ -1143,29 +1274,40 @@ export default function CourtManager({
                     />
                   </div>
                   <div>
+                    <label className="text-xs font-bold text-slate-500 block mb-1">Status do Cadastro</label>
+                    <select
+                      value={teacherStatus}
+                      onChange={(e) => setTeacherStatus(e.target.value as 'Ativo' | 'Inativo')}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer font-semibold text-slate-700"
+                    >
+                      <option value="Ativo">🟢 Ativo</option>
+                      <option value="Inativo">⚪ Inativo</option>
+                    </select>
+                  </div>
+                  <div>
                     <label className="text-xs font-bold text-slate-500 block mb-1">Observações / Especialidade</label>
                     <input
                       type="text"
-                      placeholder="Ex: Treinamento avançado de futevôlei"
+                      placeholder="Ex: Treinamento avançado"
                       value={teacherNotes}
                       onChange={(e) => setTeacherNotes(e.target.value)}
                       className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-semibold text-slate-800"
                     />
                   </div>
                 </div>
-                <div className="flex gap-2 justify-end">
+                <div className="flex gap-2 justify-end pt-2">
                   <button
                     type="button"
-                    onClick={() => setShowAddTeacherForm(false)}
+                    onClick={handleCancelTeacher}
                     className="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-50 transition cursor-pointer"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-semibold transition cursor-pointer shadow-lg shadow-blue-200"
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition cursor-pointer shadow-lg shadow-blue-200"
                   >
-                    Salvar Professor
+                    {editingTeacher ? 'Atualizar Professor' : 'Salvar Professor'}
                   </button>
                 </div>
               </form>
@@ -1174,7 +1316,7 @@ export default function CourtManager({
 
           {/* Teachers Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {Array.from(new Map(teachers.map((t) => [t.name.trim().toLowerCase(), t])).values()).map((teacher) => (
+            {Array.from(new Map(teachers.filter((t) => t.ind_cadastro_ativo !== 0).map((t) => [t.name.trim().toLowerCase(), t])).values()).map((teacher) => (
               <div
                 key={teacher.id}
                 className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition duration-200 flex flex-col justify-between"
@@ -1185,8 +1327,10 @@ export default function CourtManager({
                       <span className="px-2.5 py-0.5 bg-blue-50 text-blue-600 rounded-full text-[10px] font-bold">
                         {teacher.sport}
                       </span>
-                      <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-[10px] font-bold">
-                        Ativo
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        teacher.status === 'Ativo' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                      }`}>
+                        {teacher.status || 'Ativo'}
                       </span>
                     </div>
                     <span className="text-sm font-bold text-slate-900">
@@ -1217,28 +1361,38 @@ export default function CourtManager({
                 <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center">
                   <span className="text-[11px] text-slate-400 font-medium">Professor Cadastrado</span>
                   {isAdmin && (
-                    confirmDelTeacherId === teacher.id ? (
+                    <div className="flex items-center gap-2">
                       <button
-                        onClick={() => {
-                          onDeleteTeacher?.(teacher.id);
-                          setConfirmDelTeacherId(null);
-                        }}
-                        className="px-3 py-1.5 bg-rose-600 text-white hover:bg-rose-700 rounded-xl text-[11px] font-bold transition cursor-pointer"
+                        onClick={() => handleStartEditTeacher(teacher)}
+                        className="p-1.5 bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-xl text-slate-500 transition cursor-pointer"
+                        title="Editar Cadastro do Professor"
                       >
-                        Confirmar Exclusão
+                        <Pencil className="h-4 w-4" />
                       </button>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setConfirmDelTeacherId(teacher.id);
-                          setTimeout(() => setConfirmDelTeacherId(null), 4000);
-                        }}
-                        className="p-1.5 bg-slate-50 hover:bg-rose-50 hover:text-rose-600 rounded-xl text-slate-400 transition cursor-pointer"
-                        title="Excluir Professor"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    )
+
+                      {confirmDelTeacherId === teacher.id ? (
+                        <button
+                          onClick={() => {
+                            onDeleteTeacher?.(teacher.id);
+                            setConfirmDelTeacherId(null);
+                          }}
+                          className="px-3 py-1.5 bg-rose-600 text-white hover:bg-rose-700 rounded-xl text-[11px] font-bold transition cursor-pointer"
+                        >
+                          Confirmar Exclusão
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setConfirmDelTeacherId(teacher.id);
+                            setTimeout(() => setConfirmDelTeacherId(null), 4000);
+                          }}
+                          className="p-1.5 bg-slate-50 hover:bg-rose-50 hover:text-rose-600 rounded-xl text-slate-400 transition cursor-pointer"
+                          title="Excluir Professor"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -1250,7 +1404,7 @@ export default function CourtManager({
       {/* 4. ALUNOS SUBTAB */}
       {activeSubTab === 'alunos' && (
         <div className="space-y-6">
-          {/* Header */}
+          {/* Header & Search */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
             <div>
               <h3 className="font-bold text-slate-900 flex items-center gap-1.5 tracking-tight">
@@ -1263,8 +1417,15 @@ export default function CourtManager({
             </div>
             {isAdmin && (
               <button
-                onClick={() => setShowAddStudentForm(!showAddStudentForm)}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition flex items-center gap-2 cursor-pointer shadow-sm"
+                onClick={() => {
+                  if (showAddStudentForm) {
+                    handleCancelStudent();
+                  } else {
+                    setEditingStudent(null);
+                    setShowAddStudentForm(true);
+                  }
+                }}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition flex items-center gap-2 cursor-pointer shadow-sm shrink-0"
               >
                 <Plus className="h-4 w-4" />
                 {showAddStudentForm ? 'Fechar Form' : 'Novo Aluno'}
@@ -1272,15 +1433,69 @@ export default function CourtManager({
             )}
           </div>
 
-          {/* Add Student Form */}
+          {/* Search Bar */}
+          <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="relative flex-1">
+              <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Pesquisar aluno por nome, telefone, professor, esporte ou nível..."
+                value={studentSearchTerm}
+                onChange={(e) => setStudentSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-9 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition"
+              />
+              {studentSearchTerm && (
+                <button
+                  onClick={() => setStudentSearchTerm('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition cursor-pointer p-0.5"
+                  title="Limpar pesquisa"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            {studentSearchTerm && (
+              <div className="flex items-center gap-2 px-2 text-xs font-medium text-slate-500 shrink-0">
+                <span>Filtro ativo</span>
+                <button
+                  onClick={() => setStudentSearchTerm('')}
+                  className="text-emerald-600 hover:text-emerald-700 font-bold underline cursor-pointer text-xs"
+                >
+                  Limpar
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Student Form (Add or Edit) */}
           {showAddStudentForm && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm max-w-2xl"
             >
-              <h4 className="font-bold text-slate-950 mb-4 text-xs uppercase tracking-wider">Matricular Novo Aluno</h4>
-              <form onSubmit={handleCreateStudent} className="space-y-4">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-bold text-slate-950 text-xs uppercase tracking-wider flex items-center gap-2">
+                  {editingStudent ? (
+                    <>
+                      <Pencil className="h-3.5 w-3.5 text-emerald-600" />
+                      Editar Cadastro do Aluno
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-3.5 w-3.5 text-emerald-600" />
+                      Matricular Novo Aluno
+                    </>
+                  )}
+                </h4>
+                {editingStudent && (
+                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                    Editando: {editingStudent.name}
+                  </span>
+                )}
+              </div>
+
+              <form onSubmit={handleSaveStudentSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-bold text-slate-500 block mb-1">Nome do Aluno</label>
@@ -1325,7 +1540,7 @@ export default function CourtManager({
                       className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer font-semibold text-slate-700"
                     >
                       <option value="">Selecione um professor...</option>
-                      {teachers.map((t) => (
+                      {teachers.filter((t) => t.ind_cadastro_ativo !== 0).map((t) => (
                         <option key={t.id} value={t.id}>{t.name} ({t.sport})</option>
                       ))}
                     </select>
@@ -1353,11 +1568,32 @@ export default function CourtManager({
                       required
                     />
                   </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 block mb-1">Status da Matrícula</label>
+                    <select
+                      value={studentStatus}
+                      onChange={(e) => setStudentStatus(e.target.value as 'Ativo' | 'Inativo')}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer font-semibold text-slate-700"
+                    >
+                      <option value="Ativo">🟢 Ativo</option>
+                      <option value="Inativo">⚪ Inativo</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 block mb-1">Observações (Opcional)</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Dias de treino, horários preferenciais"
+                      value={studentNotes}
+                      onChange={(e) => setStudentNotes(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-semibold text-slate-800"
+                    />
+                  </div>
                 </div>
-                <div className="flex gap-2 justify-end">
+                <div className="flex gap-2 justify-end pt-2">
                   <button
                     type="button"
-                    onClick={() => setShowAddStudentForm(false)}
+                    onClick={handleCancelStudent}
                     className="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-50 transition cursor-pointer"
                   >
                     Cancelar
@@ -1366,7 +1602,7 @@ export default function CourtManager({
                     type="submit"
                     className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition cursor-pointer shadow-lg shadow-emerald-200"
                   >
-                    Matricular Aluno
+                    {editingStudent ? 'Atualizar Aluno' : 'Matricular Aluno'}
                   </button>
                 </div>
               </form>
@@ -1374,78 +1610,153 @@ export default function CourtManager({
           )}
 
           {/* Students Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {Array.from(new Map(students.map((s) => [s.name.trim().toLowerCase(), s])).values()).map((student) => (
-              <div
-                key={student.id}
-                className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition duration-200 flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex justify-between items-start gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2.5 py-0.5 bg-blue-50 text-blue-600 rounded-full text-[10px] font-bold">
-                        {student.sport}
-                      </span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        student.level === 'Iniciante' ? 'bg-emerald-50 text-emerald-700' :
-                        student.level === 'Intermediário' ? 'bg-blue-50 text-blue-700' :
-                        'bg-purple-50 text-purple-700'
-                      }`}>
-                        {student.level}
-                      </span>
-                    </div>
-                    <span className="text-sm font-bold text-slate-900">
-                      {formatCurrency(student.monthlyFee || 0)} / mês
-                    </span>
-                  </div>
-                  <h4 className="text-base font-bold text-slate-900 mt-2.5 tracking-tight flex items-center gap-2">
-                    <Users className="h-4 w-4 text-emerald-500" />
-                    {student.name}
-                  </h4>
-                  <div className="mt-2 space-y-1 text-xs text-slate-600">
-                    <div className="flex items-center gap-1.5">
-                      <Phone className="h-3.5 w-3.5 text-slate-400" />
-                      <span className="font-mono">{student.phone}</span>
-                    </div>
-                    {student.teacherName && (
-                      <div className="flex items-center gap-1.5 text-slate-500">
-                        <GraduationCap className="h-3.5 w-3.5 text-blue-400" />
-                        <span>Prof.: {student.teacherName}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
+          {(() => {
+            const activeStudents = Array.from(
+              new Map(students.filter((s) => s.ind_cadastro_ativo !== 0).map((s) => [s.name.trim().toLowerCase(), s])).values()
+            );
 
-                <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center">
-                  <span className="text-[11px] text-slate-400 font-medium">Aluno Matriculado</span>
-                  {isAdmin && (
-                    confirmDelStudentId === student.id ? (
-                      <button
-                        onClick={() => {
-                          onDeleteStudent?.(student.id);
-                          setConfirmDelStudentId(null);
-                        }}
-                        className="px-3 py-1.5 bg-rose-600 text-white hover:bg-rose-700 rounded-xl text-[11px] font-bold transition cursor-pointer"
-                      >
-                        Confirmar Exclusão
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setConfirmDelStudentId(student.id);
-                          setTimeout(() => setConfirmDelStudentId(null), 4000);
-                        }}
-                        className="p-1.5 bg-slate-50 hover:bg-rose-50 hover:text-rose-600 rounded-xl text-slate-400 transition cursor-pointer"
-                        title="Excluir Aluno"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    )
+            const filteredStudents = activeStudents.filter((s) => {
+              if (!studentSearchTerm.trim()) return true;
+              const term = studentSearchTerm.trim().toLowerCase();
+              const nameMatch = s.name.toLowerCase().includes(term);
+              const phoneMatch = (s.phone || '').toLowerCase().includes(term);
+              const sportMatch = (s.sport || '').toLowerCase().includes(term);
+              const teacherMatch = (s.teacherName || '').toLowerCase().includes(term);
+              const levelMatch = (s.level || '').toLowerCase().includes(term);
+              const statusMatch = (s.status || '').toLowerCase().includes(term);
+              const notesMatch = (s.notes || '').toLowerCase().includes(term);
+              return nameMatch || phoneMatch || sportMatch || teacherMatch || levelMatch || statusMatch || notesMatch;
+            });
+
+            if (filteredStudents.length === 0) {
+              return (
+                <div className="bg-white p-12 text-center rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center justify-center">
+                  <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                    <Search className="h-6 w-6" />
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-800 mb-1">Nenhum aluno encontrado</h4>
+                  <p className="text-xs text-slate-500 max-w-sm mb-4">
+                    {studentSearchTerm
+                      ? `Não encontramos nenhum aluno correspondente ao termo "${studentSearchTerm}".`
+                      : 'Nenhum aluno cadastrado no momento.'}
+                  </p>
+                  {studentSearchTerm && (
+                    <button
+                      onClick={() => setStudentSearchTerm('')}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition cursor-pointer"
+                    >
+                      Limpar Filtro de Pesquisa
+                    </button>
                   )}
                 </div>
+              );
+            }
+
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredStudents.map((student) => {
+                  const feeFormatted = formatCurrency(student.monthlyFee ?? 240);
+                  return (
+                    <div
+                      key={student.id}
+                      className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition duration-200 flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="px-2.5 py-0.5 bg-blue-50 text-blue-700 rounded-full text-[11px] font-bold">
+                              {student.sport}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                              student.level === 'Iniciante' ? 'bg-emerald-50 text-emerald-700' :
+                              student.level === 'Intermediário' ? 'bg-blue-50 text-blue-700' :
+                              'bg-purple-50 text-purple-700'
+                            }`}>
+                              {student.level}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                              student.status === 'Ativo' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                            }`}>
+                              {student.status || 'Ativo'}
+                            </span>
+                          </div>
+                          <div className="px-2.5 py-1 bg-emerald-50/80 border border-emerald-100 rounded-xl text-right">
+                            <span className="text-xs font-bold text-emerald-800 whitespace-nowrap">
+                              {feeFormatted}
+                            </span>
+                            <span className="text-[10px] text-emerald-600/80 font-medium ml-1">/mês</span>
+                          </div>
+                        </div>
+
+                        <h4 className="text-base font-bold text-slate-900 mt-3 tracking-tight flex items-center gap-2">
+                          <Users className="h-4 w-4 text-emerald-500 shrink-0" />
+                          <span className="truncate">{student.name}</span>
+                        </h4>
+
+                        <div className="mt-2.5 space-y-1.5 text-xs text-slate-600">
+                          <div className="flex items-center gap-2">
+                            <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                            <span className="font-mono font-medium text-slate-700">{student.phone}</span>
+                          </div>
+                          {student.teacherName && (
+                            <div className="flex items-center gap-2 text-slate-600">
+                              <GraduationCap className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                              <span>Prof.: <strong className="text-slate-800 font-semibold">{student.teacherName}</strong></span>
+                            </div>
+                          )}
+                          {student.notes && (
+                            <div className="pt-1">
+                              <p className="text-xs text-slate-500 italic bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                {student.notes}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="mt-5 pt-3 border-t border-slate-100 flex justify-between items-center">
+                        <span className="text-[11px] text-slate-400 font-medium">Aluno Matriculado</span>
+                        {isAdmin && (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleStartEditStudent(student)}
+                              className="p-1.5 bg-slate-50 hover:bg-emerald-50 hover:text-emerald-600 rounded-xl text-slate-500 transition cursor-pointer"
+                              title="Editar Cadastro do Aluno"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+
+                            {confirmDelStudentId === student.id ? (
+                              <button
+                                onClick={() => {
+                                  onDeleteStudent?.(student.id);
+                                  setConfirmDelStudentId(null);
+                                }}
+                                className="px-3 py-1.5 bg-rose-600 text-white hover:bg-rose-700 rounded-xl text-[11px] font-bold transition cursor-pointer"
+                              >
+                                Confirmar Exclusão
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setConfirmDelStudentId(student.id);
+                                  setTimeout(() => setConfirmDelStudentId(null), 4000);
+                                }}
+                                className="p-1.5 bg-slate-50 hover:bg-rose-50 hover:text-rose-600 rounded-xl text-slate-400 transition cursor-pointer"
+                                title="Excluir Aluno"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-          </div>
+            );
+          })()}
         </div>
       )}
 

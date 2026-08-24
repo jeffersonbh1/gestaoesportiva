@@ -108,6 +108,7 @@ export interface Teacher {
   email?: string;
   pricePerClass?: number;
   status: 'Ativo' | 'Inativo';
+  ind_cadastro_ativo?: number;
   notes?: string;
 }
 
@@ -121,6 +122,7 @@ export interface Student {
   level: 'Iniciante' | 'Intermediário' | 'Avançado';
   status: 'Ativo' | 'Inativo';
   monthlyFee?: number;
+  ind_cadastro_ativo?: number;
   notes?: string;
 }
 

@@ -68,11 +68,13 @@ export const shiftDateString = (dateStr: string, offsetDays: number): string => 
 };
 
 // Format currency to BRL
-export const formatCurrency = (value: number): string => {
+export const formatCurrency = (value: number | string | null | undefined): string => {
+  const num = typeof value === 'number' ? value : Number(value);
+  const safeNum = isNaN(num) ? 0 : num;
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
-  }).format(value);
+  }).format(safeNum);
 };
 
 // Format phone number

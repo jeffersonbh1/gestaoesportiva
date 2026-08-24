@@ -339,6 +339,7 @@ export async function dbGetTeachers(): Promise<Teacher[]> {
         email: t.email || null,
         preco_aula: Number(t.pricePerClass) || 0,
         status: t.status || 'Ativo',
+        ind_cadastro_ativo: 1,
         observacoes: t.notes || null,
       }));
       await supabase.from('professores').insert(toInsert);
@@ -349,20 +350,26 @@ export async function dbGetTeachers(): Promise<Teacher[]> {
         .order('nome', { ascending: true });
 
       if (reData && reData.length > 0) {
-        return reData.map((p) => ({
-          id: p.id,
-          name: p.nome,
-          phone: p.telefone || '',
-          sport: p.esporte || 'Futevôlei',
-          email: p.email || undefined,
-          pricePerClass: Number(p.preco_aula) || 0,
-          status: p.status || 'Ativo',
-          notes: p.observacoes || undefined,
-        }));
+        return reData
+          .filter((p) => p.ind_cadastro_ativo !== 0)
+          .map((p) => ({
+            id: p.id,
+            name: p.nome,
+            phone: p.telefone || '',
+            sport: p.esporte || 'Futevôlei',
+            email: p.email || undefined,
+            pricePerClass: Number(p.preco_aula) || 0,
+            status: p.status || 'Ativo',
+            ind_cadastro_ativo: p.ind_cadastro_ativo !== undefined && p.ind_cadastro_ativo !== null ? Number(p.ind_cadastro_ativo) : 1,
+            notes: p.observacoes || undefined,
+          }));
       }
     }
 
-    const mappedList = (data || []).map((p) => ({
+    // Filtrar apenas professores com ind_cadastro_ativo igual a 1 (ou diferente de 0)
+    const activeProfessores = (data || []).filter((p) => p.ind_cadastro_ativo !== 0);
+
+    const mappedList = activeProfessores.map((p) => ({
       id: p.id,
       name: p.nome,
       phone: p.telefone || '',
@@ -370,6 +377,7 @@ export async function dbGetTeachers(): Promise<Teacher[]> {
       email: p.email || undefined,
       pricePerClass: Number(p.preco_aula) || 0,
       status: p.status || 'Ativo',
+      ind_cadastro_ativo: p.ind_cadastro_ativo !== undefined && p.ind_cadastro_ativo !== null ? Number(p.ind_cadastro_ativo) : 1,
       notes: p.observacoes || undefined,
     }));
 
@@ -397,18 +405,37 @@ export async function dbSaveTeacher(teacher: Teacher): Promise<Teacher | null> {
     email: teacher.email || null,
     preco_aula: Number(teacher.pricePerClass) || 0,
     status: teacher.status || 'Ativo',
+    ind_cadastro_ativo: teacher.ind_cadastro_ativo !== undefined ? teacher.ind_cadastro_ativo : 1,
     observacoes: teacher.notes || null,
   };
 
-  if (isValidUuid(teacher.id)) {
+  const isUuid = isValidUuid(teacher.id);
+  if (isUuid) {
     dbProf.id = teacher.id;
   }
 
-  const { data, error } = await supabase
-    .from('professores')
-    .upsert(dbProf)
-    .select()
-    .single();
+  const query = supabase.from('professores');
+  let data: any = null;
+  let error: any = null;
+
+  if (isUuid) {
+    const res = await query.upsert(dbProf).select().single();
+    data = res.data;
+    error = res.error;
+  } else {
+    // Tenta atualizar se já existe pelo nome ou insere novo
+    const { data: existing } = await supabase.from('professores').select('id').ilike('nome', teacher.name.trim()).maybeSingle();
+    if (existing?.id) {
+      dbProf.id = existing.id;
+      const res = await supabase.from('professores').update(dbProf).eq('id', existing.id).select().single();
+      data = res.data;
+      error = res.error;
+    } else {
+      const res = await supabase.from('professores').insert(dbProf).select().single();
+      data = res.data;
+      error = res.error;
+    }
+  }
 
   if (error) {
     console.error('Erro ao salvar professor no Supabase:', error);
@@ -424,6 +451,7 @@ export async function dbSaveTeacher(teacher: Teacher): Promise<Teacher | null> {
       email: data.email || undefined,
       pricePerClass: Number(data.preco_aula) || 0,
       status: data.status || 'Ativo',
+      ind_cadastro_ativo: data.ind_cadastro_ativo !== undefined && data.ind_cadastro_ativo !== null ? Number(data.ind_cadastro_ativo) : 1,
       notes: data.observacoes || undefined,
     };
   }
@@ -434,12 +462,29 @@ export async function dbSaveTeacher(teacher: Teacher): Promise<Teacher | null> {
 export async function dbDeleteTeacher(teacherId: string): Promise<boolean> {
   if (!supabase) return false;
   try {
+    // Soft delete: Atualiza ind_cadastro_ativo para 0
     if (isValidUuid(teacherId)) {
-      await supabase.from('professores').delete().eq('id', teacherId);
+      const { error } = await supabase
+        .from('professores')
+        .update({ ind_cadastro_ativo: 0 })
+        .eq('id', teacherId);
+      if (error) {
+        console.warn('Tentativa com update falhou, tentando excluir fisicamente se campo não existir:', error);
+        await supabase.from('professores').delete().eq('id', teacherId);
+      }
+    } else {
+      const { error } = await supabase
+        .from('professores')
+        .update({ ind_cadastro_ativo: 0 })
+        .ilike('nome', teacherId);
+      if (error) {
+        console.warn('Tentativa com update falhou, tentando excluir fisicamente se campo não existir:', error);
+        await supabase.from('professores').delete().ilike('nome', teacherId);
+      }
     }
     return true;
   } catch (err) {
-    console.error('Erro ao excluir professor no Supabase:', err);
+    console.error('Erro ao inativar professor no Supabase:', err);
     return false;
   }
 }
@@ -465,6 +510,9 @@ export async function dbGetStudents(): Promise<Student[]> {
         esporte: s.sport || 'Futevôlei',
         nivel: s.level || 'Iniciante',
         status: s.status || 'Ativo',
+        mensalidade: Number(s.monthlyFee) || 240,
+        ind_cadastro_ativo: 1,
+        observacoes: s.notes || null,
       }));
       await supabase.from('alunos').insert(toInsert);
 
@@ -474,31 +522,39 @@ export async function dbGetStudents(): Promise<Student[]> {
         .order('nome', { ascending: true });
 
       if (reData && reData.length > 0) {
-        return reData.map((a) => ({
-          id: a.id,
-          name: a.nome,
-          phone: a.telefone || '',
-          sport: a.esporte || 'Futevôlei',
-          level: a.nivel || 'Iniciante',
-          teacherId: a.professor_id || undefined,
-          teacherName: a.professores?.nome || undefined,
-          status: a.status || 'Ativo',
-          notes: a.observacoes || undefined,
-        }));
+        return reData
+          .filter((a) => a.ind_cadastro_ativo !== 0)
+          .map((a) => ({
+            id: a.id,
+            name: a.nome,
+            phone: a.telefone || '',
+            sport: a.esporte || 'Futevôlei',
+            level: a.nivel || 'Iniciante',
+            teacherId: a.professor_id || undefined,
+            teacherName: a.professores?.nome || undefined,
+            status: a.status || 'Ativo',
+            ind_cadastro_ativo: a.ind_cadastro_ativo !== undefined && a.ind_cadastro_ativo !== null ? Number(a.ind_cadastro_ativo) : 1,
+            monthlyFee: Number(a.mensalidade ?? a.valor_mensalidade ?? a.valor ?? 240),
+            notes: a.observacoes || undefined,
+          }));
       }
     }
 
-    const mappedStudents = (data || []).map((a) => ({
-      id: a.id,
-      name: a.nome,
-      phone: a.telefone || '',
-      sport: a.esporte || 'Futevôlei',
-      level: a.nivel || 'Iniciante',
-      teacherId: a.professor_id || undefined,
-      teacherName: a.professores?.nome || undefined,
-      status: a.status || 'Ativo',
-      notes: a.observacoes || undefined,
-    }));
+    const mappedStudents = (data || [])
+      .filter((a) => a.ind_cadastro_ativo !== 0)
+      .map((a) => ({
+        id: a.id,
+        name: a.nome,
+        phone: a.telefone || '',
+        sport: a.esporte || 'Futevôlei',
+        level: a.nivel || 'Iniciante',
+        teacherId: a.professor_id || undefined,
+        teacherName: a.professores?.nome || undefined,
+        status: a.status || 'Ativo',
+        ind_cadastro_ativo: a.ind_cadastro_ativo !== undefined && a.ind_cadastro_ativo !== null ? Number(a.ind_cadastro_ativo) : 1,
+        monthlyFee: Number(a.mensalidade ?? a.valor_mensalidade ?? a.valor ?? 240),
+        notes: a.observacoes || undefined,
+      }));
 
     const uniqueStudentMap = new Map<string, Student>();
     for (const st of mappedStudents) {
@@ -517,25 +573,76 @@ export async function dbGetStudents(): Promise<Student[]> {
 export async function dbSaveStudent(student: Student): Promise<Student | null> {
   if (!supabase) return null;
 
+  const feeValue = student.monthlyFee !== undefined && student.monthlyFee !== null
+    ? Number(student.monthlyFee)
+    : 240;
+
   const dbAluno: any = {
-    nome: student.name,
+    nome: student.name.trim(),
     telefone: student.phone || null,
     esporte: student.sport || 'Futevôlei',
     nivel: student.level || 'Iniciante',
     professor_id: isValidUuid(student.teacherId || '') ? student.teacherId : null,
     status: student.status || 'Ativo',
+    mensalidade: feeValue,
+    ind_cadastro_ativo: student.ind_cadastro_ativo !== undefined ? student.ind_cadastro_ativo : 1,
     observacoes: student.notes || null,
   };
 
-  if (isValidUuid(student.id)) {
+  const isUuid = isValidUuid(student.id);
+  if (isUuid) {
     dbAluno.id = student.id;
   }
 
-  const { data, error } = await supabase
-    .from('alunos')
-    .upsert(dbAluno)
-    .select()
-    .single();
+  let data: any = null;
+  let error: any = null;
+
+  const executeSave = async (payload: any) => {
+    if (isUuid) {
+      return await supabase!.from('alunos').upsert(payload).select('*, professores(nome)').single();
+    } else {
+      const { data: existing } = await supabase!.from('alunos').select('id').ilike('nome', student.name.trim()).maybeSingle();
+      if (existing?.id) {
+        payload.id = existing.id;
+        return await supabase!.from('alunos').update(payload).eq('id', existing.id).select('*, professores(nome)').single();
+      } else {
+        return await supabase!.from('alunos').insert(payload).select('*, professores(nome)').single();
+      }
+    }
+  };
+
+  let res = await executeSave(dbAluno);
+  data = res.data;
+  error = res.error;
+
+  // Se der erro por coluna com nome alternativo de mensalidade ou ind_cadastro_ativo, tentar com fallbacks
+  if (error) {
+    console.warn('Erro na primeira tentativa de salvar aluno:', error);
+    const errMessage = (error.message || '').toLowerCase();
+    
+    // Tentar fallback se 'mensalidade' falhou
+    if (errMessage.includes('mensalidade')) {
+      const retryPayload = { ...dbAluno };
+      delete retryPayload.mensalidade;
+      retryPayload.valor_mensalidade = feeValue;
+      res = await executeSave(retryPayload);
+      if (!res.error) {
+        data = res.data;
+        error = null;
+      }
+    }
+
+    // Se ainda com erro e menciona ind_cadastro_ativo
+    if (error && (error.message || '').toLowerCase().includes('ind_cadastro_ativo')) {
+      const retryPayload = { ...dbAluno };
+      delete retryPayload.ind_cadastro_ativo;
+      res = await executeSave(retryPayload);
+      if (!res.error) {
+        data = res.data;
+        error = null;
+      }
+    }
+  }
 
   if (error) {
     console.error('Erro ao salvar aluno no Supabase:', error);
@@ -550,7 +657,10 @@ export async function dbSaveStudent(student: Student): Promise<Student | null> {
       sport: data.esporte || 'Futevôlei',
       level: data.nivel || 'Iniciante',
       teacherId: data.professor_id || undefined,
+      teacherName: data.professores?.nome || student.teacherName || undefined,
       status: data.status || 'Ativo',
+      ind_cadastro_ativo: data.ind_cadastro_ativo !== undefined && data.ind_cadastro_ativo !== null ? Number(data.ind_cadastro_ativo) : 1,
+      monthlyFee: Number(data.mensalidade ?? data.valor_mensalidade ?? data.valor ?? feeValue),
       notes: data.observacoes || undefined,
     };
   }
@@ -562,11 +672,27 @@ export async function dbDeleteStudent(studentId: string): Promise<boolean> {
   if (!supabase) return false;
   try {
     if (isValidUuid(studentId)) {
-      await supabase.from('alunos').delete().eq('id', studentId);
+      const { error } = await supabase
+        .from('alunos')
+        .update({ ind_cadastro_ativo: 0 })
+        .eq('id', studentId);
+      if (error) {
+        console.warn('Tentativa de soft delete falhou no Supabase, tentando exclusão física:', error);
+        await supabase.from('alunos').delete().eq('id', studentId);
+      }
+    } else {
+      const { error } = await supabase
+        .from('alunos')
+        .update({ ind_cadastro_ativo: 0 })
+        .ilike('nome', studentId);
+      if (error) {
+        console.warn('Tentativa de soft delete falhou no Supabase, tentando exclusão física:', error);
+        await supabase.from('alunos').delete().ilike('nome', studentId);
+      }
     }
     return true;
   } catch (err) {
-    console.error('Erro ao excluir aluno no Supabase:', err);
+    console.error('Erro ao excluir/inativar aluno no Supabase:', err);
     return false;
   }
 }
