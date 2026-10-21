@@ -62,27 +62,102 @@ export default function BarModule({
   const [activeBarTab, setActiveBarTab] = useState<'comandas' | 'directSale' | 'products' | 'purchases' | 'reports' | 'movements'>('comandas');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // State in memory - Database as single source of truth
-  const [comandas, setComandas] = useState<BarComanda[]>(() => isSupabaseConfigured ? [] : getInitialComandas());
-  const [products, setProducts] = useState<BarProduct[]>(INITIAL_BAR_PRODUCTS);
-  const [categories, setCategories] = useState<BarCategoryItem[]>(INITIAL_BAR_CATEGORIES);
-  const [sales, setSales] = useState<BarSale[]>(() => isSupabaseConfigured ? [] : getInitialBarSales());
-  const [purchases, setPurchases] = useState<BarPurchase[]>([]);
-  const [movements, setMovements] = useState<StockMovement[]>(() => isSupabaseConfigured ? [] : getInitialStockMovements());
+  // State in memory with localStorage cache fallback for instant reload persistence
+  const [comandas, setComandas] = useState<BarComanda[]>(() => {
+    try {
+      const saved = localStorage.getItem('arena_bar_comandas');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return isSupabaseConfigured ? [] : getInitialComandas();
+  });
 
-  // Clear any existing localStorage cache to adhere to "no local storage" policy
+  const [products, setProducts] = useState<BarProduct[]>(() => {
+    try {
+      const saved = localStorage.getItem('arena_bar_products');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return INITIAL_BAR_PRODUCTS;
+  });
+
+  const [categories, setCategories] = useState<BarCategoryItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('arena_bar_categories');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return INITIAL_BAR_CATEGORIES;
+  });
+
+  const [sales, setSales] = useState<BarSale[]>(() => {
+    try {
+      const saved = localStorage.getItem('arena_bar_sales');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return isSupabaseConfigured ? [] : getInitialBarSales();
+  });
+
+  const [purchases, setPurchases] = useState<BarPurchase[]>(() => {
+    try {
+      const saved = localStorage.getItem('arena_bar_purchases');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [];
+  });
+
+  const [movements, setMovements] = useState<StockMovement[]>(() => {
+    try {
+      const saved = localStorage.getItem('arena_bar_stock_movements');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return isSupabaseConfigured ? [] : getInitialStockMovements();
+  });
+
+  // Sync state changes to localStorage
   useEffect(() => {
     try {
-      localStorage.removeItem('arena_bar_comandas');
-      localStorage.removeItem('arena_bar_products');
-      localStorage.removeItem('arena_bar_sales');
-      localStorage.removeItem('arena_bar_stock_movements');
-      localStorage.removeItem('arena_bar_purchases');
-      localStorage.removeItem('arena_bar_categories');
-    } catch (e) {
-      // Ignore if localStorage is restricted
-    }
-  }, []);
+      if (comandas.length > 0) {
+        localStorage.setItem('arena_bar_comandas', JSON.stringify(comandas));
+      }
+    } catch (e) {}
+  }, [comandas]);
+
+  useEffect(() => {
+    try {
+      if (products.length > 0) {
+        localStorage.setItem('arena_bar_products', JSON.stringify(products));
+      }
+    } catch (e) {}
+  }, [products]);
+
+  useEffect(() => {
+    try {
+      if (sales.length > 0) {
+        localStorage.setItem('arena_bar_sales', JSON.stringify(sales));
+      }
+    } catch (e) {}
+  }, [sales]);
+
+  useEffect(() => {
+    try {
+      if (movements.length > 0) {
+        localStorage.setItem('arena_bar_stock_movements', JSON.stringify(movements));
+      }
+    } catch (e) {}
+  }, [movements]);
 
   // Load from Supabase Database on mount if configured
   useEffect(() => {
@@ -97,12 +172,29 @@ export default function BarModule({
           dbGetStockMovements(),
           dbGetBarPurchases()
         ]);
-        if (dbProds && dbProds.length > 0) setProducts(dbProds);
-        if (dbCats && dbCats.length > 0) setCategories(dbCats);
-        setComandas(dbCmds || []);
-        setSales(dbSls || []);
-        setMovements(dbMovs || []);
-        setPurchases(dbPchs || []);
+        if (dbProds && dbProds.length > 0) {
+          setProducts(dbProds);
+          try { localStorage.setItem('arena_bar_products', JSON.stringify(dbProds)); } catch (e) {}
+        }
+        if (dbCats && dbCats.length > 0) {
+          setCategories(dbCats);
+          try { localStorage.setItem('arena_bar_categories', JSON.stringify(dbCats)); } catch (e) {}
+        }
+        if (dbCmds && dbCmds.length > 0) {
+          setComandas(dbCmds);
+          try { localStorage.setItem('arena_bar_comandas', JSON.stringify(dbCmds)); } catch (e) {}
+        }
+        if (dbSls && dbSls.length > 0) {
+          setSales(dbSls);
+          try { localStorage.setItem('arena_bar_sales', JSON.stringify(dbSls)); } catch (e) {}
+        }
+        if (dbMovs && dbMovs.length > 0) {
+          setMovements(dbMovs);
+          try { localStorage.setItem('arena_bar_stock_movements', JSON.stringify(dbMovs)); } catch (e) {}
+        }
+        if (dbPchs && dbPchs.length > 0) {
+          setPurchases(dbPchs);
+        }
       } catch (err) {
         console.error('Erro ao carregar dados do bar do Supabase:', err);
       }
@@ -112,58 +204,84 @@ export default function BarModule({
 
   // Handle Open New Comanda
   const handleOpenComanda = (newComanda: BarComanda) => {
-    setComandas(prev => [newComanda, ...prev]);
+    setComandas(prev => {
+      const next = [newComanda, ...prev.filter(c => c.id !== newComanda.id)];
+      try {
+        localStorage.setItem('arena_bar_comandas', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
     if (isSupabaseConfigured) {
       dbSaveBarComanda(newComanda).catch(err => console.error('Erro ao salvar comanda no banco:', err));
     }
   };
 
   // Handle Add Items to Existing Comanda (agrupando por produto no extrato)
-  const handleAddItemToComanda = (comandaId: string, itemsToAdd: BarComandaItem[]) => {
-    const targetComanda = comandas.find(c => c.id === comandaId);
-    if (!targetComanda) return;
+  const handleAddItemToComanda = (comandaId: string, itemsToAdd: BarComandaItem[], fallbackComanda?: BarComanda) => {
+    let updatedComandaToSave: BarComanda | null = null;
 
-    // Agrupa e consolida os itens por produto na comanda
-    const updatedItems = [...targetComanda.items];
-
-    for (const newItem of itemsToAdd) {
-      const existingIndex = updatedItems.findIndex(i =>
-        (i.productId && newItem.productId && i.productId === newItem.productId) ||
-        (i.productName.trim().toLowerCase() === newItem.productName.trim().toLowerCase() && i.unitPrice === newItem.unitPrice)
-      );
-
-      if (existingIndex >= 0) {
-        const existing = updatedItems[existingIndex];
-        const combinedQty = existing.quantity + newItem.quantity;
-        const combinedTotal = combinedQty * existing.unitPrice;
-        updatedItems[existingIndex] = {
-          ...existing,
-          quantity: combinedQty,
-          totalPrice: combinedTotal,
-          addedAt: existing.addedAt ? `${existing.addedAt}` : newItem.addedAt
-        };
-      } else {
-        updatedItems.push(newItem);
+    setComandas(prevComandas => {
+      const targetComanda = prevComandas.find(c => c.id === comandaId) || fallbackComanda;
+      if (!targetComanda) {
+        console.warn('Comanda não encontrada para adicionar itens:', comandaId);
+        return prevComandas;
       }
-    }
 
-    const newTotal = updatedItems.reduce((acc, i) => acc + i.totalPrice, 0);
-    const newFinal = Math.max(0, newTotal - (targetComanda.discount || 0));
+      // Agrupa e consolida os itens por produto na comanda
+      const updatedItems = [...targetComanda.items];
 
-    const updatedComandaToSave: BarComanda = {
-      ...targetComanda,
-      items: updatedItems,
-      totalAmount: newTotal,
-      finalAmount: newFinal
-    };
+      for (const newItem of itemsToAdd) {
+        const existingIndex = updatedItems.findIndex(i =>
+          (i.productId && newItem.productId && i.productId === newItem.productId) ||
+          (i.productName.trim().toLowerCase() === newItem.productName.trim().toLowerCase() && i.unitPrice === newItem.unitPrice)
+        );
 
-    // 1. Update Comanda State
-    setComandas(prev => prev.map(c => c.id === comandaId ? updatedComandaToSave : c));
+        if (existingIndex >= 0) {
+          const existing = updatedItems[existingIndex];
+          const combinedQty = existing.quantity + newItem.quantity;
+          const combinedTotal = combinedQty * existing.unitPrice;
+          updatedItems[existingIndex] = {
+            ...existing,
+            quantity: combinedQty,
+            totalPrice: combinedTotal,
+            addedAt: existing.addedAt || newItem.addedAt
+          };
+        } else {
+          updatedItems.push(newItem);
+        }
+      }
+
+      const newTotal = updatedItems.reduce((acc, i) => acc + i.totalPrice, 0);
+      const newFinal = Math.max(0, newTotal - (targetComanda.discount || 0));
+
+      updatedComandaToSave = {
+        ...targetComanda,
+        items: updatedItems,
+        totalAmount: newTotal,
+        finalAmount: newFinal
+      };
+
+      const exists = prevComandas.some(c => c.id === comandaId);
+      const nextList = exists
+        ? prevComandas.map(c => c.id === comandaId ? updatedComandaToSave! : c)
+        : [updatedComandaToSave!, ...prevComandas];
+
+      try {
+        localStorage.setItem('arena_bar_comandas', JSON.stringify(nextList));
+      } catch (e) {}
+
+      // Salva no banco de dados
+      if (isSupabaseConfigured && updatedComandaToSave) {
+        dbSaveBarComanda(updatedComandaToSave).catch(err => console.error('Erro ao salvar comanda no banco:', err));
+      }
+
+      return nextList;
+    });
 
     // 2. Deduct Product Stock
     const updatedProductsToSave: BarProduct[] = [];
     setProducts(prevProducts => {
-      return prevProducts.map(prod => {
+      const nextProds = prevProducts.map(prod => {
         const addedItems = itemsToAdd.filter(i => i.productId === prod.id);
         if (addedItems.length > 0) {
           const totalQtyAdded = addedItems.reduce((acc, i) => acc + i.quantity, 0);
@@ -173,12 +291,16 @@ export default function BarModule({
         }
         return prod;
       });
+      try {
+        localStorage.setItem('arena_bar_products', JSON.stringify(nextProds));
+      } catch (e) {}
+      return nextProds;
     });
 
     // 3. Log Stock Movement
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    const dateStr = targetComanda.date;
+    const dateStr = now.toISOString().split('T')[0];
 
     const newMovements: StockMovement[] = itemsToAdd.map((item, idx) => ({
       id: `mov-cmd-${comandaId}-${Date.now()}-${idx}`,
@@ -186,16 +308,21 @@ export default function BarModule({
       productName: item.productName,
       type: 'Saída (Venda)',
       quantity: -item.quantity,
-      reason: `Consumo Comanda ${targetComanda.code} (${targetComanda.customerName})`,
+      reason: `Consumo Comanda`,
       createdAt: `${dateStr} ${timeStr}`,
       user: currentUser ? currentUser.name : 'Operador do Bar'
     }));
 
-    setMovements(prev => [...newMovements, ...prev]);
+    setMovements(prev => {
+      const next = [...newMovements, ...prev];
+      try {
+        localStorage.setItem('arena_bar_stock_movements', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
 
     // Save directly to database
     if (isSupabaseConfigured) {
-      dbSaveBarComanda(updatedComandaToSave).catch(err => console.error('Erro ao salvar comanda no banco:', err));
       updatedProductsToSave.forEach(p => dbSaveBarProduct(p).catch(err => console.error(err)));
       newMovements.forEach(m => dbSaveStockMovement(m).catch(err => console.error(err)));
     }
@@ -203,62 +330,83 @@ export default function BarModule({
 
   // Handle Remove Item from Open Comanda (suporta estorno de 1 unidade ou exclusão total)
   const handleRemoveItemFromComanda = (comandaId: string, itemId: string, quantityToRemove?: number) => {
-    const targetComanda = comandas.find(c => c.id === comandaId);
-    if (!targetComanda) return;
+    let updatedComandaToSave: BarComanda | null = null;
+    let itemToRemove: BarComandaItem | undefined;
+    let qtyToDeduct = 1;
 
-    const itemToRemove = targetComanda.items.find(i => i.id === itemId);
+    setComandas(prevComandas => {
+      const targetComanda = prevComandas.find(c => c.id === comandaId);
+      if (!targetComanda) return prevComandas;
+
+      itemToRemove = targetComanda.items.find(i => i.id === itemId);
+      if (!itemToRemove) return prevComandas;
+
+      qtyToDeduct = (quantityToRemove && quantityToRemove > 0 && quantityToRemove < itemToRemove.quantity)
+        ? quantityToRemove
+        : itemToRemove.quantity;
+
+      let updatedItems: BarComandaItem[];
+      if (qtyToDeduct < itemToRemove.quantity) {
+        const remainingQty = itemToRemove.quantity - qtyToDeduct;
+        updatedItems = targetComanda.items.map(i => {
+          if (i.id === itemId) {
+            return {
+              ...i,
+              quantity: remainingQty,
+              totalPrice: remainingQty * i.unitPrice
+            };
+          }
+          return i;
+        });
+      } else {
+        updatedItems = targetComanda.items.filter(i => i.id !== itemId);
+      }
+
+      const newTotal = updatedItems.reduce((acc, i) => acc + i.totalPrice, 0);
+      const newFinal = Math.max(0, newTotal - (targetComanda.discount || 0));
+
+      updatedComandaToSave = {
+        ...targetComanda,
+        items: updatedItems,
+        totalAmount: newTotal,
+        finalAmount: newFinal
+      };
+
+      const next = prevComandas.map(c => c.id === comandaId ? updatedComandaToSave! : c);
+      try {
+        localStorage.setItem('arena_bar_comandas', JSON.stringify(next));
+      } catch (e) {}
+
+      if (isSupabaseConfigured && updatedComandaToSave) {
+        dbSaveBarComanda(updatedComandaToSave).catch(err => console.error('Erro ao salvar comanda no banco:', err));
+      }
+
+      return next;
+    });
+
     if (!itemToRemove) return;
 
-    const qtyToDeduct = (quantityToRemove && quantityToRemove > 0 && quantityToRemove < itemToRemove.quantity)
-      ? quantityToRemove
-      : itemToRemove.quantity;
-
-    let updatedItems: BarComandaItem[];
-    if (qtyToDeduct < itemToRemove.quantity) {
-      const remainingQty = itemToRemove.quantity - qtyToDeduct;
-      updatedItems = targetComanda.items.map(i => {
-        if (i.id === itemId) {
-          return {
-            ...i,
-            quantity: remainingQty,
-            totalPrice: remainingQty * i.unitPrice
-          };
-        }
-        return i;
-      });
-    } else {
-      updatedItems = targetComanda.items.filter(i => i.id !== itemId);
-    }
-
-    const newTotal = updatedItems.reduce((acc, i) => acc + i.totalPrice, 0);
-    const newFinal = Math.max(0, newTotal - (targetComanda.discount || 0));
-
-    const updatedComandaToSave: BarComanda = {
-      ...targetComanda,
-      items: updatedItems,
-      totalAmount: newTotal,
-      finalAmount: newFinal
-    };
-
-    // 1. Update Comanda
-    setComandas(prev => prev.map(c => c.id === comandaId ? updatedComandaToSave : c));
-
-    // 2. Restore Stock
+    // Restore Stock
     let updatedProductToSave: BarProduct | null = null;
     setProducts(prevProducts => {
-      return prevProducts.map(prod => {
-        if (prod.id === itemToRemove.productId) {
+      const nextProds = prevProducts.map(prod => {
+        if (prod.id === itemToRemove!.productId) {
           const res = { ...prod, stock: prod.stock + qtyToDeduct };
           updatedProductToSave = res;
           return res;
         }
         return prod;
       });
+      try {
+        localStorage.setItem('arena_bar_products', JSON.stringify(nextProds));
+      } catch (e) {}
+      return nextProds;
     });
 
-    // 3. Log Movement
+    // Log Movement
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    const dateStr = now.toISOString().split('T')[0];
 
     const restoreMov: StockMovement = {
       id: `mov-estorno-${itemId}-${Date.now()}`,
@@ -266,16 +414,20 @@ export default function BarModule({
       productName: itemToRemove.productName,
       type: 'Entrada',
       quantity: qtyToDeduct,
-      reason: `Estorno ${qtyToDeduct}x ${itemToRemove.productName} Comanda ${targetComanda.code} (${targetComanda.customerName})`,
-      createdAt: `${targetComanda.date} ${timeStr}`,
+      reason: `Estorno ${qtyToDeduct}x ${itemToRemove.productName} Comanda`,
+      createdAt: `${dateStr} ${timeStr}`,
       user: currentUser ? currentUser.name : 'Operador do Bar'
     };
 
-    setMovements(prev => [restoreMov, ...prev]);
+    setMovements(prev => {
+      const next = [restoreMov, ...prev];
+      try {
+        localStorage.setItem('arena_bar_stock_movements', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
 
-    // Save to database
     if (isSupabaseConfigured) {
-      dbSaveBarComanda(updatedComandaToSave).catch(err => console.error(err));
       if (updatedProductToSave) dbSaveBarProduct(updatedProductToSave).catch(err => console.error(err));
       dbSaveStockMovement(restoreMov).catch(err => console.error(err));
     }

@@ -2252,13 +2252,13 @@ export async function dbDeleteBarProduct(productId: string): Promise<boolean> {
 export async function dbGetBarComandas(): Promise<BarComanda[]> {
   if (!supabase) return [];
   try {
-    // Try vendas_bar first, fallback to comandas_bar
     let cData: any = null;
     let cError: any = null;
 
+    // Busca vendas_bar com os itens_vendas_bar aninhados via Foreign Key (sem limite de 1000 itens)
     const resVendas = await supabase
       .from('vendas_bar')
-      .select('*')
+      .select('*, itens_vendas_bar(*)')
       .order('aberto_em', { ascending: false });
 
     if (!resVendas.error && resVendas.data) {
@@ -2279,53 +2279,40 @@ export async function dbGetBarComandas(): Promise<BarComanda[]> {
 
     if (!cData || cData.length === 0) return [];
 
-    // Try itens_vendas_bar first, fallback to itens_comanda_bar
-    let iData: any[] = [];
-    const resItensVendas = await supabase.from('itens_vendas_bar').select('*');
-    if (!resItensVendas.error && resItensVendas.data) {
-      iData = resItensVendas.data;
-    } else {
-      const resItensComanda = await supabase.from('itens_comanda_bar').select('*');
-      if (resItensComanda.data) iData = resItensComanda.data;
-    }
+    return cData.map((c: any) => {
+      // Itens retornados pelo join relacional
+      const rawItems = c.itens_vendas_bar || c.itens_comanda_bar || [];
+      const items: BarComandaItem[] = Array.isArray(rawItems)
+        ? rawItems.map((item: any) => ({
+            id: item.id,
+            productId: item.produto_id,
+            productName: item.nome_produto,
+            quantity: Number(item.quantidade) || 1,
+            unitPrice: Number(item.preco_unitario) || 0,
+            totalPrice: Number(item.preco_total) || 0,
+            addedAt: item.adicionado_em || new Date().toISOString()
+          }))
+        : [];
 
-    const itemsMap: Record<string, BarComandaItem[]> = {};
-    (iData || []).forEach(item => {
-      const parentId = item.vendas_id || item.venda_id || item.comanda_id;
-      if (!parentId) return;
-
-      if (!itemsMap[parentId]) {
-        itemsMap[parentId] = [];
-      }
-      itemsMap[parentId].push({
-        id: item.id,
-        productId: item.produto_id,
-        productName: item.nome_produto,
-        quantity: Number(item.quantidade) || 1,
-        unitPrice: Number(item.preco_unitario) || 0,
-        totalPrice: Number(item.preco_total) || 0,
-        addedAt: item.adicionado_em || new Date().toISOString()
-      });
+      return {
+        id: c.id,
+        code: c.codigo,
+        customerName: c.nome_cliente,
+        customerPhone: c.telefone_cliente || '',
+        location: c.localizacao || 'Balcão',
+        status: c.status || 'Aberta',
+        openedAt: c.aberto_em || c.criado_em,
+        closedAt: c.fechado_em || undefined,
+        date: c.data,
+        items,
+        totalAmount: Number(c.valor_total) || 0,
+        discount: Number(c.desconto) || 0,
+        finalAmount: Number(c.valor_final) || 0,
+        paymentMethod: c.forma_pagamento || undefined,
+        notes: c.observacoes || undefined,
+        origemVenda: c.origem_venda || 'comanda'
+      };
     });
-
-    return cData.map((c: any) => ({
-      id: c.id,
-      code: c.codigo,
-      customerName: c.nome_cliente,
-      customerPhone: c.telefone_cliente || '',
-      location: c.localizacao || 'Balcão',
-      status: c.status || 'Aberta',
-      openedAt: c.aberto_em || c.criado_em,
-      closedAt: c.fechado_em || undefined,
-      date: c.data,
-      items: itemsMap[c.id] || [],
-      totalAmount: Number(c.valor_total) || 0,
-      discount: Number(c.desconto) || 0,
-      finalAmount: Number(c.valor_final) || 0,
-      paymentMethod: c.forma_pagamento || undefined,
-      notes: c.observacoes || undefined,
-      origemVenda: c.origem_venda || 'comanda'
-    }));
   } catch (err) {
     console.warn('Erro ao buscar comandas no Supabase:', err);
     return [];
@@ -2395,7 +2382,7 @@ export async function dbSaveBarComanda(comanda: BarComanda): Promise<BarComanda 
   const itemsTable = targetTable === 'vendas_bar' ? 'itens_vendas_bar' : 'itens_comanda_bar';
 
   try {
-    // Try deleting old items
+    // Limpa itens antigos desta comanda para regravar o extrato consolidado
     const delRes = await supabase.from(itemsTable).delete().eq('vendas_id', comandaId);
     if (delRes.error) {
       await supabase.from(itemsTable).delete().eq('comanda_id', comandaId);
@@ -2431,7 +2418,7 @@ export async function dbSaveBarComanda(comanda: BarComanda): Promise<BarComanda 
         id: item.id || `ci-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         vendas_id: comandaId,
         comanda_id: comandaId,
-        produto_id: item.productId,
+        produto_id: item.productId || null,
         nome_produto: item.productName,
         quantidade: Number(item.quantity) || 1,
         preco_unitario: Number(item.unitPrice) || 0,
@@ -2439,17 +2426,17 @@ export async function dbSaveBarComanda(comanda: BarComanda): Promise<BarComanda 
         adicionado_em: formatTimestampForDb(comanda.date, item.addedAt)
       }));
 
-      // Try inserting with vendas_id first
-      let { error: itemErr } = await supabase.from(itemsTable).insert(
+      // Inserção com upsert seguro
+      let { error: itemErr } = await supabase.from(itemsTable).upsert(
         dbItems.map(({ comanda_id, ...rest }) => rest)
       );
 
       if (itemErr) {
-        // Fallback to inserting with comanda_id
+        // Fallback para inserir com comanda_id caso a tabela use essa coluna
         const fallbackItems = dbItems.map(({ vendas_id, ...rest }) => rest);
-        const { error: fallbackErr } = await supabase.from(itemsTable).insert(fallbackItems);
+        const { error: fallbackErr } = await supabase.from(itemsTable).upsert(fallbackItems);
         if (fallbackErr) {
-          console.error('Erro ao inserir itens:', fallbackErr);
+          console.error('Erro ao inserir itens da comanda:', fallbackErr);
         }
       }
     }
@@ -2465,7 +2452,7 @@ export async function dbGetBarSales(): Promise<BarSale[]> {
   try {
     const { data: sData, error: sError } = await supabase
       .from('vendas_bar')
-      .select('*')
+      .select('*, itens_vendas_bar(*)')
       .order('criado_em', { ascending: false });
 
     if (sError) {
@@ -2475,52 +2462,39 @@ export async function dbGetBarSales(): Promise<BarSale[]> {
 
     if (!sData || sData.length === 0) return [];
 
-    let iData: any[] = [];
-    const resItensVendas = await supabase.from('itens_vendas_bar').select('*');
-    if (!resItensVendas.error && resItensVendas.data) {
-      iData = resItensVendas.data;
-    } else {
-      const resItensVenda = await supabase.from('itens_venda_bar').select('*');
-      if (resItensVenda.data) iData = resItensVenda.data;
-    }
+    return sData.map((s: any) => {
+      const rawItems = s.itens_vendas_bar || s.itens_venda_bar || [];
+      const items: BarSaleItem[] = Array.isArray(rawItems)
+        ? rawItems.map((item: any) => ({
+            productId: item.produto_id,
+            productName: item.nome_produto,
+            quantity: Number(item.quantidade) || 1,
+            unitPrice: Number(item.preco_unitario) || 0,
+            totalPrice: Number(item.preco_total) || 0,
+            addedAt: item.adicionado_em || undefined
+          }))
+        : [];
 
-    const itemsMap: Record<string, BarSaleItem[]> = {};
-    (iData || []).forEach(item => {
-      const parentId = item.vendas_id || item.venda_id || item.comanda_id;
-      if (!parentId) return;
-
-      if (!itemsMap[parentId]) {
-        itemsMap[parentId] = [];
-      }
-      itemsMap[parentId].push({
-        productId: item.produto_id,
-        productName: item.nome_produto,
-        quantity: Number(item.quantidade) || 1,
-        unitPrice: Number(item.preco_unitario) || 0,
-        totalPrice: Number(item.preco_total) || 0,
-        addedAt: item.adicionado_em || undefined
-      });
+      return {
+        id: s.id,
+        code: s.codigo,
+        comandaId: s.comanda_id || undefined,
+        customerName: s.nome_cliente || 'Cliente',
+        customerPhone: s.telefone_cliente || undefined,
+        location: s.localizacao || 'Balcão',
+        items,
+        totalAmount: Number(s.valor_total) || 0,
+        discount: Number(s.desconto) || 0,
+        finalAmount: Number(s.valor_final) || 0,
+        paymentMethod: s.forma_pagamento || 'Pix',
+        paymentStatus: s.status_pagamento || 'Pago',
+        status: s.status || 'Concluída',
+        createdAt: s.criado_em || s.aberto_em,
+        date: s.data,
+        notes: s.observacoes || undefined,
+        origemVenda: s.origem_venda || (s.comanda_id ? 'comanda' : 'balcão')
+      };
     });
-
-    return sData.map((s: any) => ({
-      id: s.id,
-      code: s.codigo,
-      comandaId: s.comanda_id || undefined,
-      customerName: s.nome_cliente || 'Cliente',
-      customerPhone: s.telefone_cliente || undefined,
-      location: s.localizacao || 'Balcão',
-      items: itemsMap[s.id] || [],
-      totalAmount: Number(s.valor_total) || 0,
-      discount: Number(s.desconto) || 0,
-      finalAmount: Number(s.valor_final) || 0,
-      paymentMethod: s.forma_pagamento || 'Pix',
-      paymentStatus: s.status_pagamento || 'Pago',
-      status: s.status || 'Concluída',
-      createdAt: s.criado_em || s.aberto_em,
-      date: s.data,
-      notes: s.observacoes || undefined,
-      origemVenda: s.origem_venda || (s.comanda_id ? 'comanda' : 'balcão')
-    }));
   } catch (err) {
     console.warn('Erro ao buscar vendas no Supabase:', err);
     return [];

@@ -82,7 +82,7 @@ interface BarComandasManagerProps {
   products: BarProduct[];
   categories?: BarCategoryItem[];
   onOpenComanda: (newComanda: BarComanda) => void;
-  onAddItemToComanda: (comandaId: string, itemsToAdd: BarComandaItem[]) => void;
+  onAddItemToComanda: (comandaId: string, itemsToAdd: BarComandaItem[], fallbackComanda?: BarComanda) => void;
   onRemoveItemFromComanda: (comandaId: string, itemId: string, quantityToRemove?: number) => void;
   onCloseComanda: (comandaId: string, paymentMethod: PaymentMethod | string, discount: number, finalAmount: number, notes?: string) => void;
   onCancelComanda: (comandaId: string) => void;
@@ -110,6 +110,15 @@ export default function BarComandasManager({
   const [selectedComandaForReceipt, setSelectedComandaForReceipt] = useState<BarComanda | null>(null);
   const [selectedComandaToClose, setSelectedComandaToClose] = useState<BarComanda | null>(null);
   const [itemToDeleteId, setItemToDeleteId] = useState<string | null>(null);
+
+  // Success Feedback Toast
+  const [successToast, setSuccessToast] = useState<{
+    comandaCode: string;
+    customerName: string;
+    totalUnits: number;
+    totalAmount: number;
+    targetComandaId: string;
+  } | null>(null);
 
   // New Comanda Form State
   const [newCustomerName, setNewCustomerName] = useState('');
@@ -251,6 +260,7 @@ export default function BarComandasManager({
   const handleConfirmAddItems = () => {
     if (!selectedComandaToAddItems || selectedAddCart.length === 0) return;
 
+    const targetComanda = selectedComandaToAddItems;
     const now = new Date();
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
@@ -266,7 +276,25 @@ export default function BarComandasManager({
       addedAt: timeStr
     }));
 
-    onAddItemToComanda(selectedComandaToAddItems.id, itemsToAdd);
+    // Registra e consolida no extrato da comanda
+    onAddItemToComanda(targetComanda.id, itemsToAdd, targetComanda);
+
+    const totalAdded = itemsToAdd.reduce((acc, i) => acc + i.totalPrice, 0);
+    const totalUnits = itemsToAdd.reduce((acc, i) => acc + i.quantity, 0);
+
+    // Dispara banner de sucesso e feedback imediato
+    setSuccessToast({
+      comandaCode: targetComanda.code,
+      customerName: targetComanda.customerName,
+      totalUnits,
+      totalAmount: totalAdded,
+      targetComandaId: targetComanda.id
+    });
+
+    // Auto-hide após 5 segundos
+    setTimeout(() => {
+      setSuccessToast(null);
+    }, 5000);
 
     // Reset and close
     setSelectedAddCart([]);
@@ -336,6 +364,48 @@ export default function BarComandasManager({
 
   return (
     <div className="space-y-6">
+      {/* Toast Notification Banner para Lançamento e Consolidação no Extrato */}
+      {successToast && (
+        <div className="bg-emerald-600 text-white p-4 sm:p-5 rounded-3xl shadow-xl border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-3 duration-200">
+          <div className="flex items-center gap-3.5">
+            <div className="h-10 w-10 bg-white/20 rounded-2xl flex items-center justify-center shrink-0">
+              <Check className="h-5 w-5 text-white stroke-[3]" />
+            </div>
+            <div>
+              <p className="font-black text-sm">
+                Consumo lançado e consolidado com sucesso na comanda {successToast.comandaCode}!
+              </p>
+              <p className="text-xs text-emerald-100 font-medium mt-0.5">
+                Cliente: <strong>{successToast.customerName}</strong> • <strong>{successToast.totalUnits}</strong> {successToast.totalUnits === 1 ? 'item adicionado' : 'itens adicionados'} • Total lançado: <strong>{formatCurrency(successToast.totalAmount)}</strong>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                const target = comandas.find(c => c.id === successToast.targetComandaId);
+                if (target) {
+                  setSelectedComandaForReceipt(target);
+                }
+              }}
+              className="px-4 py-2 bg-white text-emerald-950 rounded-xl text-xs font-black hover:bg-emerald-50 transition shadow-sm cursor-pointer flex items-center gap-1.5"
+            >
+              <FileText className="h-3.5 w-3.5 text-emerald-700" />
+              Ver Extrato Consolidado
+            </button>
+            <button
+              type="button"
+              onClick={() => setSuccessToast(null)}
+              className="p-2 text-white/80 hover:text-white rounded-xl hover:bg-white/10 transition cursor-pointer"
+              title="Fechar aviso"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Top Header Controls Bar */}
       <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-2xs space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
