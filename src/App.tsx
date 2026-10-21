@@ -758,13 +758,16 @@ export default function App() {
   // 0. Bar Management Module View
   if (activeModule === 'bar') {
     return (
-      <div className="min-h-screen bg-slate-50 antialiased font-sans text-slate-900 p-4 md:p-8 max-w-7xl mx-auto">
-        <BarModule 
-          currentUser={currentUser} 
-          onSwitchToQuadras={() => setActiveModule('quadras')} 
-          onSwitchModuleHub={() => setActiveModule('hub')} 
-        />
-      </div>
+      <BarModule 
+        currentUser={currentUser} 
+        onSwitchToQuadras={() => setActiveModule('quadras')} 
+        onSwitchToJogador={() => setActiveModule('jogador')}
+        onSwitchModuleHub={() => setActiveModule('hub')} 
+        onLogout={() => {
+          setCurrentUser(null);
+          setActiveTab('dashboard');
+        }}
+      />
     );
   }
 

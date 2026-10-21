@@ -31,13 +31,59 @@ import {
   Zap
 } from 'lucide-react';
 
+export interface GroupedBarItem {
+  id: string;
+  itemIds: string[];
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  addedAt: string;
+  times: string[];
+}
+
+export function groupComandaItems(items: BarComandaItem[]): GroupedBarItem[] {
+  const map = new Map<string, GroupedBarItem>();
+
+  for (const item of (items || [])) {
+    const key = item.productId
+      ? `${item.productId}_${item.unitPrice}`
+      : `${item.productName.trim().toLowerCase()}_${item.unitPrice}`;
+
+    const existing = map.get(key);
+    if (existing) {
+      existing.quantity += item.quantity;
+      existing.totalPrice += item.totalPrice;
+      if (!existing.itemIds.includes(item.id)) existing.itemIds.push(item.id);
+      if (item.addedAt && !existing.times.includes(item.addedAt)) {
+        existing.times.push(item.addedAt);
+      }
+    } else {
+      map.set(key, {
+        id: item.id,
+        itemIds: [item.id],
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.totalPrice,
+        addedAt: item.addedAt || '',
+        times: item.addedAt ? [item.addedAt] : []
+      });
+    }
+  }
+
+  return Array.from(map.values());
+}
+
 interface BarComandasManagerProps {
   comandas: BarComanda[];
   products: BarProduct[];
   categories?: BarCategoryItem[];
   onOpenComanda: (newComanda: BarComanda) => void;
   onAddItemToComanda: (comandaId: string, itemsToAdd: BarComandaItem[]) => void;
-  onRemoveItemFromComanda: (comandaId: string, itemId: string) => void;
+  onRemoveItemFromComanda: (comandaId: string, itemId: string, quantityToRemove?: number) => void;
   onCloseComanda: (comandaId: string, paymentMethod: PaymentMethod | string, discount: number, finalAmount: number, notes?: string) => void;
   onCancelComanda: (comandaId: string) => void;
   onSwitchToDirectSale?: () => void;
@@ -227,29 +273,41 @@ export default function BarComandasManager({
     setSelectedComandaToAddItems(null);
   };
 
-  // Copy WhatsApp Receipt text
+  // Copy WhatsApp Receipt text (agrupado por produto)
   const handleShareWhatsAppReceipt = (comanda: BarComanda) => {
-    let text = `*ARENA FAHEL BEACH - COMANDA ${comanda.code}*\n`;
-    text += `👤 *Cliente:* ${comanda.customerName}\n`;
-    text += `📱 *Telefone:* ${comanda.customerPhone}\n`;
-    text += `📍 *Local:* ${comanda.location || 'Balcão'}\n`;
-    text += `🕒 *Abertura:* ${comanda.openedAt}\n\n`;
-    text += `*ITENS CONSUMIDOS:*\n`;
+    let text = `🏖️ *ARENA FAHEL BEACH - EXTRATO DE CONSUMO*\n`;
+    text += `*Comanda:* ${comanda.code} | *Local:* ${comanda.location || 'Balcão'}\n`;
+    text += `*Cliente:* ${comanda.customerName}\n`;
+    if (comanda.customerPhone) {
+      text += `*Telefone:* ${comanda.customerPhone}\n`;
+    }
+    text += `*Abertura:* ${comanda.openedAt}\n`;
+    text += `*Status:* ${comanda.status}\n\n`;
+    text += `📋 *EXTRATO AGRUPADO POR PRODUTO:*\n`;
 
-    comanda.items.forEach(item => {
-      text += `• ${item.quantity}x ${item.productName} (${formatCurrency(item.unitPrice)}) = ${formatCurrency(item.totalPrice)}\n`;
-    });
+    const grouped = groupComandaItems(comanda.items);
+    if (grouped.length === 0) {
+      text += `_Nenhum item consumido._\n`;
+    } else {
+      grouped.forEach(item => {
+        text += `• ${item.quantity}x ${item.productName} (${formatCurrency(item.unitPrice)}) = ${formatCurrency(item.totalPrice)}\n`;
+      });
+      const totalUnits = grouped.reduce((acc, i) => acc + i.quantity, 0);
+      text += `\n*Total de Itens:* ${totalUnits} unidades (${grouped.length} produtos distintos)\n`;
+    }
 
     if (comanda.discount > 0) {
-      text += `\n*Desconto:* -${formatCurrency(comanda.discount)}\n`;
+      text += `*Desconto:* -${formatCurrency(comanda.discount)}\n`;
     }
 
     text += `\n💰 *TOTAL A PAGAR: ${formatCurrency(comanda.finalAmount)}*\n`;
     text += `\nObrigado pela preferência! 🏖️🎾`;
 
     const encodedText = encodeURIComponent(text);
-    const cleanPhone = comanda.customerPhone.replace(/\D/g, '');
-    const whatsappUrl = `https://wa.me/55${cleanPhone}?text=${encodedText}`;
+    const cleanPhone = (comanda.customerPhone || '').replace(/\D/g, '');
+    const whatsappUrl = cleanPhone 
+      ? `https://wa.me/55${cleanPhone}?text=${encodedText}`
+      : `https://api.whatsapp.com/send?text=${encodedText}`;
 
     window.open(whatsappUrl, '_blank');
   };
@@ -380,7 +438,9 @@ export default function BarComandasManager({
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         {filteredComandas.map((comanda) => {
           const isOpen = comanda.status === 'Aberta';
-          const totalItemsCount = comanda.items.reduce((acc, i) => acc + i.quantity, 0);
+          const groupedCardItems = groupComandaItems(comanda.items);
+          const distinctProductsCount = groupedCardItems.length;
+          const totalUnitsCount = groupedCardItems.reduce((acc, i) => acc + i.quantity, 0);
 
           return (
             <div
@@ -437,28 +497,33 @@ export default function BarComandasManager({
                     </div>
                   </div>
 
-                  {/* Consumed Items Preview */}
+                  {/* Consumed Items Preview (Agrupado por Produto) */}
                   <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 space-y-2">
                     <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-                      <span>Consumo ({totalItemsCount} {totalItemsCount === 1 ? 'item' : 'itens'})</span>
+                      <span className="flex items-center gap-1">
+                        <Receipt className="h-3.5 w-3.5 text-amber-600" />
+                        Consumo ({distinctProductsCount} {distinctProductsCount === 1 ? 'produto' : 'produtos'} • {totalUnitsCount} un)
+                      </span>
                       <span className="text-amber-600 font-black">{formatCurrency(comanda.finalAmount)}</span>
                     </div>
 
-                    {comanda.items.length === 0 ? (
+                    {groupedCardItems.length === 0 ? (
                       <p className="text-[11px] text-slate-400 italic py-1">
                         Nenhum item lançado até o momento.
                       </p>
                     ) : (
-                      <div className="space-y-1 max-h-24 overflow-y-auto scrollbar-thin pr-1 text-xs">
-                        {comanda.items.slice(0, 3).map((item, idx) => (
-                          <div key={idx} className="flex justify-between text-slate-600 text-[11px]">
-                            <span className="truncate pr-2">• {item.quantity}x {item.productName}</span>
-                            <span className="font-semibold text-slate-800">{formatCurrency(item.totalPrice)}</span>
+                      <div className="space-y-1.5 max-h-28 overflow-y-auto scrollbar-thin pr-1 text-xs">
+                        {groupedCardItems.slice(0, 3).map((item, idx) => (
+                          <div key={idx} className="flex justify-between items-center text-slate-700 text-[11px] bg-white px-2.5 py-1 rounded-xl border border-slate-100 shadow-2xs">
+                            <span className="truncate pr-2 font-medium">
+                              <strong className="text-amber-700 font-black mr-1">{item.quantity}x</strong> {item.productName}
+                            </span>
+                            <span className="font-black text-slate-900 shrink-0">{formatCurrency(item.totalPrice)}</span>
                           </div>
                         ))}
-                        {comanda.items.length > 3 && (
+                        {groupedCardItems.length > 3 && (
                           <p className="text-[10px] text-amber-600 font-bold text-right pt-0.5">
-                            + {comanda.items.length - 3} outros itens...
+                            + {groupedCardItems.length - 3} outros produtos agrupados...
                           </p>
                         )}
                       </div>
@@ -795,41 +860,94 @@ export default function BarComandasManager({
                 </div>
               </div>
 
-              {/* Cart Tray Items Selected (4 cols) */}
+              {/* Cart Tray Items Selected (5 cols - Coluna de Lançamento) */}
               <div className="md:col-span-5 bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col justify-between space-y-3">
                 <div>
                   <h4 className="text-xs font-extrabold text-slate-800 border-b border-slate-200 pb-2 flex items-center justify-between">
-                    <span>Itens a Lançar</span>
-                    <span className="text-amber-600">({selectedAddCart.length})</span>
+                    <span className="flex items-center gap-1.5">
+                      <Receipt className="h-4 w-4 text-amber-600" />
+                      Coluna de Produtos a Lançar
+                    </span>
+                    <span className="bg-amber-100 text-amber-900 font-black text-[11px] px-2 py-0.5 rounded-full">
+                      {selectedAddCart.length} {selectedAddCart.length === 1 ? 'item' : 'itens'}
+                    </span>
                   </h4>
 
                   <div className="space-y-2 mt-2 max-h-[300px] overflow-y-auto scrollbar-thin">
                     {selectedAddCart.length === 0 ? (
                       <p className="text-xs text-slate-400 text-center py-10">
-                        Selecione os produtos ao lado para incluir na comanda.
+                        Selecione os produtos ao lado para incluir nesta coluna da comanda.
                       </p>
                     ) : (
-                      selectedAddCart.map((item) => (
-                        <div
-                          key={item.product.id}
-                          className="bg-white p-2.5 rounded-xl border border-slate-200 text-xs flex items-center justify-between"
-                        >
-                          <div className="min-w-0 flex-1 pr-2">
-                            <p className="font-bold text-slate-800 line-clamp-1">{item.product.name}</p>
-                            <p className="text-[11px] text-slate-500">{item.quantity}x {formatCurrency(item.product.price)}</p>
+                      selectedAddCart.map((item) => {
+                        const existingInTab = selectedComandaToAddItems?.items.find(ci => 
+                          (ci.productId && ci.productId === item.product.id) ||
+                          (ci.productName.trim().toLowerCase() === item.product.name.trim().toLowerCase())
+                        );
+                        const alreadyInTabQty = existingInTab ? existingInTab.quantity : 0;
+
+                        return (
+                          <div
+                            key={item.product.id}
+                            className="bg-white p-2.5 rounded-xl border border-slate-200 text-xs flex items-center justify-between shadow-2xs"
+                          >
+                            <div className="min-w-0 flex-1 pr-2">
+                              <p className="font-bold text-slate-800 line-clamp-1">{item.product.name}</p>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="text-[11px] text-slate-500 font-medium">
+                                  {item.quantity}x {formatCurrency(item.product.price)}
+                                </span>
+                                <span className="text-slate-300">•</span>
+                                <span className="font-extrabold text-slate-900">
+                                  {formatCurrency(item.product.price * item.quantity)}
+                                </span>
+                              </div>
+                              {alreadyInTabQty > 0 && (
+                                <p className="text-[10px] text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded-md inline-block mt-1 border border-amber-200/60">
+                                  Já no extrato: {alreadyInTabQty} un • Novo total: {alreadyInTabQty + item.quantity} un
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg p-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => updateAddCartQty(item.product, -1)}
+                                  className="w-5 h-5 rounded bg-white text-slate-700 font-bold text-xs flex items-center justify-center hover:bg-slate-100 cursor-pointer"
+                                  title="Diminuir"
+                                >
+                                  -
+                                </button>
+                                <span className="px-1 text-xs font-black text-amber-900">{item.quantity}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => updateAddCartQty(item.product, 1)}
+                                  className="w-5 h-5 rounded bg-amber-500 text-white font-bold text-xs flex items-center justify-center hover:bg-amber-600 cursor-pointer"
+                                  title="Aumentar"
+                                >
+                                  +
+                                </button>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => updateAddCartQty(item.product, -item.quantity)}
+                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition cursor-pointer"
+                                title="Remover da coluna de lançamento"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                           </div>
-                          <span className="font-extrabold text-slate-900">
-                            {formatCurrency(item.product.price * item.quantity)}
-                          </span>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </div>
 
                 <div className="border-t border-slate-200 pt-3 space-y-2">
                   <div className="flex justify-between items-center text-sm font-extrabold text-slate-900">
-                    <span>Subtotal Adicional:</span>
+                    <span>Subtotal a Adicionar:</span>
                     <span className="text-amber-600">
                       {formatCurrency(selectedAddCart.reduce((acc, i) => acc + (i.product.price * i.quantity), 0))}
                     </span>
@@ -845,7 +963,7 @@ export default function BarComandasManager({
                     }`}
                   >
                     <Check className="h-4 w-4 stroke-[3]" />
-                    Lançar na Comanda
+                    Lançar e Consolidar no Extrato
                   </button>
                 </div>
               </div>
@@ -912,93 +1030,164 @@ export default function BarComandasManager({
                 </div>
               </div>
 
-              {/* Itemized consumption list */}
-              <div className="space-y-2 max-h-64 overflow-y-auto scrollbar-thin pr-1">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold text-slate-800">
-                    Itens Consumidos ({activeComanda.items.length}):
-                  </p>
-                  {isComandaOpen && activeComanda.items.length > 0 && (
-                    <span className="text-[10px] text-slate-400">
-                      Clique na lixeira para excluir
-                    </span>
-                  )}
-                </div>
+              {/* Itemized consumption list agrupado por produto */}
+              {(() => {
+                const groupedItems = groupComandaItems(activeComanda.items);
+                const totalUnits = groupedItems.reduce((acc, i) => acc + i.quantity, 0);
 
-                {activeComanda.items.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                    Nenhum item lançado ainda.
-                  </p>
-                ) : (
-                  activeComanda.items.map((item) => (
-                    <div
-                      key={item.id}
-                      className={`p-2.5 rounded-xl border transition flex items-center justify-between text-xs ${
-                        itemToDeleteId === item.id 
-                          ? 'bg-rose-50 border-rose-300' 
-                          : 'bg-slate-50/80 border-slate-200/80'
-                      }`}
-                    >
-                      <div className="min-w-0 flex-1 pr-2">
-                        <p className="font-bold text-slate-800">{item.productName}</p>
+                return (
+                  <div className="space-y-2 max-h-72 overflow-y-auto scrollbar-thin pr-1">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <Receipt className="h-4 w-4 text-amber-600" />
+                          Extrato Agrupado ({groupedItems.length} {groupedItems.length === 1 ? 'produto' : 'produtos'} • {totalUnits} {totalUnits === 1 ? 'unidade' : 'unidades'})
+                        </p>
                         <p className="text-[10px] text-slate-400">
-                          {item.quantity}x {formatCurrency(item.unitPrice)} • Lançado às {item.addedAt}
+                          Itens consolidados por produto com conferência de consumo.
                         </p>
                       </div>
-
-                      <div className="flex items-center gap-2">
-                        <span className="font-extrabold text-slate-900">
-                          {formatCurrency(item.totalPrice)}
+                      {isComandaOpen && groupedItems.length > 0 && (
+                        <span className="text-[10px] text-slate-400">
+                          Ajuste as quantidades (+ / -)
                         </span>
-
-                        {isComandaOpen && (
-                          <>
-                            {itemToDeleteId === item.id ? (
-                              <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-rose-200 shadow-xs">
-                                <span className="text-[10px] font-bold text-rose-700 px-1">Excluir?</span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    onRemoveItemFromComanda(activeComanda.id, item.id);
-                                    setSelectedComandaForReceipt(prev => prev ? {
-                                      ...prev,
-                                      items: prev.items.filter(i => i.id !== item.id),
-                                      totalAmount: prev.totalAmount - item.totalPrice,
-                                      finalAmount: Math.max(0, prev.totalAmount - item.totalPrice - (prev.discount || 0))
-                                    } : null);
-                                    setItemToDeleteId(null);
-                                  }}
-                                  className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-[10px] font-black cursor-pointer transition shadow-xs"
-                                  title="Confirmar exclusão do item"
-                                >
-                                  Sim
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setItemToDeleteId(null)}
-                                  className="px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-[10px] font-bold cursor-pointer transition"
-                                  title="Cancelar"
-                                >
-                                  Não
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => setItemToDeleteId(item.id)}
-                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                                title="Excluir item da comanda"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </div>
+                      )}
                     </div>
-                  ))
-                )}
-              </div>
+
+                    {groupedItems.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        Nenhum item lançado ainda.
+                      </p>
+                    ) : (
+                      groupedItems.map((item) => (
+                        <div
+                          key={item.id}
+                          className={`p-3 rounded-2xl border transition flex items-center justify-between text-xs ${
+                            itemToDeleteId === item.id 
+                              ? 'bg-rose-50 border-rose-300' 
+                              : 'bg-slate-50/80 border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1 pr-2">
+                            <div className="flex items-center gap-2">
+                              <span className="bg-amber-100 text-amber-900 font-black text-[11px] px-2 py-0.5 rounded-lg border border-amber-200 shadow-2xs">
+                                {item.quantity}x
+                              </span>
+                              <p className="font-bold text-slate-800 line-clamp-1">{item.productName}</p>
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-1 flex flex-wrap items-center gap-1.5">
+                              <span className="font-semibold text-slate-600">{formatCurrency(item.unitPrice)} un</span>
+                              {item.times && item.times.length > 0 && (
+                                <>
+                                  <span className="text-slate-300">•</span>
+                                  <span className="text-slate-400">
+                                    {item.times.length > 1 
+                                      ? `Lançado às: ${item.times.join(', ')}` 
+                                      : `Lançado às ${item.times[0]}`}
+                                  </span>
+                                </>
+                              )}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2.5 shrink-0">
+                            <span className="font-black text-slate-900 text-xs sm:text-sm">
+                              {formatCurrency(item.totalPrice)}
+                            </span>
+
+                            {isComandaOpen && (
+                              <>
+                                {itemToDeleteId === item.id ? (
+                                  <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-rose-200 shadow-xs">
+                                    <span className="text-[10px] font-bold text-rose-700 px-1">Excluir tudo?</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        item.itemIds.forEach(id => {
+                                          onRemoveItemFromComanda(activeComanda.id, id);
+                                        });
+                                        setSelectedComandaForReceipt(prev => prev ? {
+                                          ...prev,
+                                          items: prev.items.filter(i => !item.itemIds.includes(i.id)),
+                                          totalAmount: prev.totalAmount - item.totalPrice,
+                                          finalAmount: Math.max(0, prev.totalAmount - item.totalPrice - (prev.discount || 0))
+                                        } : null);
+                                        setItemToDeleteId(null);
+                                      }}
+                                      className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-[10px] font-black cursor-pointer transition shadow-xs"
+                                      title="Confirmar exclusão de todas as unidades deste produto"
+                                    >
+                                      Sim
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setItemToDeleteId(null)}
+                                      className="px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-[10px] font-bold cursor-pointer transition"
+                                      title="Cancelar"
+                                    >
+                                      Não
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-0.5 bg-white border border-slate-200 rounded-xl p-0.5 shadow-2xs">
+                                    {/* Decrement 1 unit */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        onRemoveItemFromComanda(activeComanda.id, item.id, 1);
+                                      }}
+                                      className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-rose-100 hover:text-rose-700 text-slate-700 font-extrabold text-xs flex items-center justify-center transition cursor-pointer"
+                                      title="Diminuir 1 unidade (estorno de 1 unidade para o estoque)"
+                                    >
+                                      -
+                                    </button>
+
+                                    {/* Quick Increment 1 unit */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const now = new Date();
+                                        const hours = String(now.getHours()).padStart(2, '0');
+                                        const minutes = String(now.getMinutes()).padStart(2, '0');
+                                        const timeStr = `${hours}:${minutes}`;
+
+                                        const itemToAdd: BarComandaItem = {
+                                          id: `ci-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+                                          productId: item.productId,
+                                          productName: item.productName,
+                                          quantity: 1,
+                                          unitPrice: item.unitPrice,
+                                          totalPrice: item.unitPrice,
+                                          addedAt: timeStr
+                                        };
+                                        onAddItemToComanda(activeComanda.id, [itemToAdd]);
+                                      }}
+                                      className="w-6 h-6 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 font-extrabold text-xs flex items-center justify-center transition cursor-pointer"
+                                      title="Adicionar mais 1 unidade deste produto"
+                                    >
+                                      +
+                                    </button>
+
+                                    {/* Full Trash delete */}
+                                    <button
+                                      type="button"
+                                      onClick={() => setItemToDeleteId(item.id)}
+                                      className="w-6 h-6 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition cursor-pointer ml-0.5"
+                                      title="Excluir todas as unidades deste produto"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Total Box */}
               <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-sm font-black text-slate-900">
@@ -1059,9 +1248,21 @@ export default function BarComandasManager({
             </div>
 
             <form onSubmit={handleFinishCloseComanda} className="space-y-4">
-              {/* Items summary */}
+              {/* Items summary (agrupado por produto) */}
               <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2 text-xs">
-                <div className="flex justify-between font-bold text-slate-700 border-b border-slate-200/60 pb-1.5">
+                <div className="space-y-1.5 max-h-32 overflow-y-auto scrollbar-thin pb-2 border-b border-slate-200/60">
+                  <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Itens Consumidos (Agrupados):</p>
+                  {groupComandaItems(selectedComandaToClose.items).map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-slate-700 text-xs">
+                      <span className="truncate pr-2 font-medium">
+                        <strong className="text-amber-700 font-black mr-1">{item.quantity}x</strong> {item.productName}
+                      </span>
+                      <span className="font-extrabold text-slate-900 shrink-0">{formatCurrency(item.totalPrice)}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-between font-bold text-slate-700 pt-1">
                   <span>Subtotal Consumido:</span>
                   <span>{formatCurrency(selectedComandaToClose.totalAmount)}</span>
                 </div>

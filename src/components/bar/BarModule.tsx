@@ -33,21 +33,34 @@ import {
   History, 
   Volleyball, 
   ArrowLeftRight,
-  ShoppingCart
+  ShoppingCart,
+  UtensilsCrossed,
+  Users,
+  Menu,
+  X,
+  ChevronRight,
+  LogOut,
+  Sparkles,
+  Layers
 } from 'lucide-react';
 
 interface BarModuleProps {
   currentUser: User | null;
   onSwitchToQuadras: () => void;
   onSwitchModuleHub: () => void;
+  onSwitchToJogador?: () => void;
+  onLogout?: () => void;
 }
 
 export default function BarModule({
   currentUser,
   onSwitchToQuadras,
-  onSwitchModuleHub
+  onSwitchModuleHub,
+  onSwitchToJogador,
+  onLogout
 }: BarModuleProps) {
   const [activeBarTab, setActiveBarTab] = useState<'comandas' | 'directSale' | 'products' | 'purchases' | 'reports' | 'movements'>('comandas');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // State in memory - Database as single source of truth
   const [comandas, setComandas] = useState<BarComanda[]>(() => isSupabaseConfigured ? [] : getInitialComandas());
@@ -105,13 +118,35 @@ export default function BarModule({
     }
   };
 
-  // Handle Add Items to Existing Comanda
+  // Handle Add Items to Existing Comanda (agrupando por produto no extrato)
   const handleAddItemToComanda = (comandaId: string, itemsToAdd: BarComandaItem[]) => {
     const targetComanda = comandas.find(c => c.id === comandaId);
     if (!targetComanda) return;
 
-    // Calculate updated Comanda object directly
-    const updatedItems = [...targetComanda.items, ...itemsToAdd];
+    // Agrupa e consolida os itens por produto na comanda
+    const updatedItems = [...targetComanda.items];
+
+    for (const newItem of itemsToAdd) {
+      const existingIndex = updatedItems.findIndex(i =>
+        (i.productId && newItem.productId && i.productId === newItem.productId) ||
+        (i.productName.trim().toLowerCase() === newItem.productName.trim().toLowerCase() && i.unitPrice === newItem.unitPrice)
+      );
+
+      if (existingIndex >= 0) {
+        const existing = updatedItems[existingIndex];
+        const combinedQty = existing.quantity + newItem.quantity;
+        const combinedTotal = combinedQty * existing.unitPrice;
+        updatedItems[existingIndex] = {
+          ...existing,
+          quantity: combinedQty,
+          totalPrice: combinedTotal,
+          addedAt: existing.addedAt ? `${existing.addedAt}` : newItem.addedAt
+        };
+      } else {
+        updatedItems.push(newItem);
+      }
+    }
+
     const newTotal = updatedItems.reduce((acc, i) => acc + i.totalPrice, 0);
     const newFinal = Math.max(0, newTotal - (targetComanda.discount || 0));
 
@@ -166,15 +201,35 @@ export default function BarModule({
     }
   };
 
-  // Handle Remove Item from Open Comanda
-  const handleRemoveItemFromComanda = (comandaId: string, itemId: string) => {
+  // Handle Remove Item from Open Comanda (suporta estorno de 1 unidade ou exclusão total)
+  const handleRemoveItemFromComanda = (comandaId: string, itemId: string, quantityToRemove?: number) => {
     const targetComanda = comandas.find(c => c.id === comandaId);
     if (!targetComanda) return;
 
     const itemToRemove = targetComanda.items.find(i => i.id === itemId);
     if (!itemToRemove) return;
 
-    const updatedItems = targetComanda.items.filter(i => i.id !== itemId);
+    const qtyToDeduct = (quantityToRemove && quantityToRemove > 0 && quantityToRemove < itemToRemove.quantity)
+      ? quantityToRemove
+      : itemToRemove.quantity;
+
+    let updatedItems: BarComandaItem[];
+    if (qtyToDeduct < itemToRemove.quantity) {
+      const remainingQty = itemToRemove.quantity - qtyToDeduct;
+      updatedItems = targetComanda.items.map(i => {
+        if (i.id === itemId) {
+          return {
+            ...i,
+            quantity: remainingQty,
+            totalPrice: remainingQty * i.unitPrice
+          };
+        }
+        return i;
+      });
+    } else {
+      updatedItems = targetComanda.items.filter(i => i.id !== itemId);
+    }
+
     const newTotal = updatedItems.reduce((acc, i) => acc + i.totalPrice, 0);
     const newFinal = Math.max(0, newTotal - (targetComanda.discount || 0));
 
@@ -193,7 +248,7 @@ export default function BarModule({
     setProducts(prevProducts => {
       return prevProducts.map(prod => {
         if (prod.id === itemToRemove.productId) {
-          const res = { ...prod, stock: prod.stock + itemToRemove.quantity };
+          const res = { ...prod, stock: prod.stock + qtyToDeduct };
           updatedProductToSave = res;
           return res;
         }
@@ -210,8 +265,8 @@ export default function BarModule({
       productId: itemToRemove.productId,
       productName: itemToRemove.productName,
       type: 'Entrada',
-      quantity: itemToRemove.quantity,
-      reason: `Estorno Item Comanda ${targetComanda.code} (${targetComanda.customerName})`,
+      quantity: qtyToDeduct,
+      reason: `Estorno ${qtyToDeduct}x ${itemToRemove.productName} Comanda ${targetComanda.code} (${targetComanda.customerName})`,
       createdAt: `${targetComanda.date} ${timeStr}`,
       user: currentUser ? currentUser.name : 'Operador do Bar'
     };
@@ -621,139 +676,336 @@ export default function BarModule({
   };
 
   const openComandasCount = comandas.filter(c => c.status === 'Aberta').length;
+  const openComandasTotal = comandas
+    .filter(c => c.status === 'Aberta')
+    .reduce((acc, c) => acc + (c.finalAmount || c.totalAmount || 0), 0);
+
+  const navItems = [
+    { 
+      id: 'comandas' as const, 
+      label: 'Comandas & Mesas', 
+      icon: Receipt,
+      badge: openComandasCount > 0 ? `${openComandasCount} abertas` : '0',
+      badgeColor: openComandasCount > 0 ? 'bg-amber-100 text-amber-800 font-black' : 'bg-slate-100 text-slate-500',
+      description: 'Gestão de comandas, consumo e fechamento'
+    },
+    { 
+      id: 'directSale' as const, 
+      label: 'Venda Rápida (PDV)', 
+      icon: Zap,
+      badge: 'Balcão',
+      badgeColor: 'bg-emerald-100 text-emerald-800 font-bold',
+      description: 'Venda direta sem abertura de comanda'
+    },
+    { 
+      id: 'products' as const, 
+      label: 'Produtos & Cardápio', 
+      icon: Package,
+      badge: `${products.length}`,
+      badgeColor: 'bg-slate-100 text-slate-700 font-semibold',
+      description: 'Cadastro de itens, preços e categorias'
+    },
+    { 
+      id: 'purchases' as const, 
+      label: 'Compras & Entradas', 
+      icon: ShoppingCart,
+      badge: `${purchases.length}`,
+      badgeColor: 'bg-slate-100 text-slate-700 font-semibold',
+      description: 'Entrada de mercadorias e reposição de estoque'
+    },
+    { 
+      id: 'reports' as const, 
+      label: 'Relatórios de Vendas', 
+      icon: BarChart3,
+      badge: `${sales.length}`,
+      badgeColor: 'bg-blue-100 text-blue-800 font-semibold',
+      description: 'Fechamento de caixa, formas de pagamento e métricas'
+    },
+    { 
+      id: 'movements' as const, 
+      label: 'Histórico de Estoque', 
+      icon: History,
+      badge: `${movements.length}`,
+      badgeColor: 'bg-slate-100 text-slate-700 font-semibold',
+      description: 'Auditoria de entradas, saídas e ajustes manuais'
+    }
+  ];
+
+  const currentTabMeta = navItems.find(t => t.id === activeBarTab) || navItems[0];
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Clean Modern Header Bar */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-2xs space-y-5">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="bg-amber-100/80 text-amber-900 border border-amber-200/60 px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wide">
-                Bar & Snack Bar Arena Fahel
-              </span>
+    <div id="bar-module-root" className="min-h-screen bg-slate-50 flex flex-col md:flex-row antialiased font-sans text-slate-900">
+      
+      {/* Sidebar Navigation */}
+      <aside className="w-full md:w-64 bg-white text-slate-800 shrink-0 md:sticky md:top-0 md:h-screen flex flex-col justify-between border-r border-slate-200 z-30 overflow-y-auto">
+        <div>
+          {/* Brand/Logo Header */}
+          <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-amber-200">
+                <UtensilsCrossed className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="text-sm font-black tracking-tight text-slate-800 leading-tight">
+                  Arena Fahel Beach
+                </h1>
+                <p className="text-[10px] text-amber-600 font-extrabold uppercase tracking-wider">
+                  Bar & Vendas PDV
+                </p>
+              </div>
             </div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-              Gestão de Comandas
-            </h1>
-            <p className="text-xs text-slate-500 font-medium">
-              Abertura de comandas por cliente, consumo contínuo e fechamento de conta.
-            </p>
+            
+            {/* Mobile menu switch */}
+            <button 
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-1.5 hover:bg-slate-50 rounded-lg md:hidden text-slate-400 cursor-pointer"
+              title={mobileMenuOpen ? 'Fechar Menu' : 'Abrir Menu'}
+            >
+              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
           </div>
 
-          {/* Module Switch Buttons */}
-          <div className="flex items-center gap-2">
+          {/* Module Switch Quick Banners */}
+          <div className="p-3 border-b border-slate-100 bg-slate-50 space-y-1.5">
             <button
               onClick={onSwitchToQuadras}
-              className="px-4 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/80 rounded-2xl text-xs font-bold flex items-center gap-2 transition cursor-pointer shadow-2xs"
-              title="Alternar para Módulo de Quadras"
+              className="w-full flex items-center justify-between px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold transition shadow-2xs cursor-pointer"
+              title="Ir para o Módulo de Quadras & Agenda"
             >
-              <Volleyball className="h-4 w-4 text-blue-600" />
-              Agendamento de Quadras
+              <div className="flex items-center gap-2">
+                <Volleyball className="h-4 w-4" />
+                <span>Quadras & Agenda</span>
+              </div>
+              <ChevronRight className="h-4 w-4 opacity-80" />
             </button>
+
+            {onSwitchToJogador && (
+              <button
+                onClick={onSwitchToJogador}
+                className="w-full flex items-center justify-between px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition shadow-2xs cursor-pointer"
+                title="Ir para o Módulo do Jogador & Sorteios"
+              >
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  <span>Módulo do Jogador</span>
+                </div>
+                <ChevronRight className="h-4 w-4 opacity-80" />
+              </button>
+            )}
 
             <button
               onClick={onSwitchModuleHub}
-              className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold transition cursor-pointer border border-slate-200"
-              title="Trocar Módulo / Tela Inicial"
+              className="w-full text-center text-[10px] font-bold text-slate-500 hover:text-slate-800 py-1 transition flex items-center justify-center gap-1 cursor-pointer"
+              title="Voltar à Central de Módulos"
             >
-              <ArrowLeftRight className="h-4 w-4" />
+              <ArrowLeftRight className="h-3 w-3" />
+              Central de Módulos
             </button>
+          </div>
+
+          {/* Contextual Bar Fast Indicators */}
+          <div className={`p-4 border-b border-slate-100 md:block ${mobileMenuOpen ? 'block' : 'hidden md:block'}`}>
+            <div className="bg-amber-50/70 border border-amber-200/70 rounded-2xl p-3 space-y-1">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="font-bold text-amber-900 flex items-center gap-1">
+                  <Receipt className="h-3.5 w-3.5 text-amber-600" />
+                  Comandas Abertas:
+                </span>
+                <span className="font-black text-amber-950 font-mono bg-amber-200/60 px-1.5 py-0.5 rounded-md text-[10px]">
+                  {openComandasCount}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] pt-1 border-t border-amber-200/50">
+                <span className="text-amber-800/80 font-medium text-[10px]">Total em Consumo:</span>
+                <span className="font-extrabold text-amber-950 font-mono text-xs">
+                  {openComandasTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Navigation Links */}
+          <nav className={`p-4 space-y-1 md:block ${mobileMenuOpen ? 'block' : 'hidden md:block'}`}>
+            <div className="px-2 pb-2 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+              Navegação do Bar
+            </div>
+
+            {navItems.map((item) => {
+              const IconComp = item.icon;
+              const isActive = activeBarTab === item.id;
+
+              return (
+                <button
+                  key={item.id}
+                  id={`nav-bar-${item.id}`}
+                  onClick={() => { 
+                    setActiveBarTab(item.id); 
+                    setMobileMenuOpen(false); 
+                  }}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                    isActive 
+                      ? 'bg-amber-50 text-amber-800 font-extrabold shadow-2xs border border-amber-200/80' 
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <IconComp className={`h-4 w-4 shrink-0 ${isActive ? 'text-amber-600' : 'text-slate-400'}`} />
+                    <span className="truncate">{item.label}</span>
+                  </div>
+
+                  {item.badge && (
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ml-1.5 ${item.badgeColor}`}>
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Sidebar Footer User Section */}
+        <div className={`p-4 border-t border-slate-100 bg-slate-50/50 md:block ${mobileMenuOpen ? 'block' : 'hidden md:block'}`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-amber-500 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-2xs">
+                {currentUser ? currentUser.name.charAt(0).toUpperCase() : 'B'}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-slate-900 truncate">
+                  {currentUser ? currentUser.name : 'Operador do Bar'}
+                </p>
+                <span className="text-[10px] font-bold text-amber-700 bg-amber-100/70 px-1.5 py-0.2 rounded inline-block">
+                  {currentUser ? currentUser.role : 'Bar & Caixa'}
+                </span>
+              </div>
+            </div>
+
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer shrink-0"
+                title="Sair da Conta"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="flex-1 min-w-0 p-4 md:p-8 max-w-7xl mx-auto overflow-y-auto w-full space-y-6">
+        
+        {/* Dynamic Context Header */}
+        <div className="bg-white rounded-3xl p-5 md:p-6 border border-slate-200/80 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="bg-amber-100/80 text-amber-900 border border-amber-200/60 px-3 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide">
+                Bar & Vendas PDV
+              </span>
+              <span className="text-slate-300">•</span>
+              <span className="text-xs font-bold text-slate-500">
+                {currentTabMeta.label}
+              </span>
+            </div>
+            <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
+              <currentTabMeta.icon className="h-5 w-5 text-amber-600" />
+              {currentTabMeta.label}
+            </h1>
+            <p className="text-xs text-slate-500 font-medium">
+              {currentTabMeta.description}
+            </p>
+          </div>
+
+          {/* Quick Action Shortcuts */}
+          <div className="flex flex-wrap items-center gap-2">
+            {activeBarTab !== 'comandas' && (
+              <button
+                onClick={() => setActiveBarTab('comandas')}
+                className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/70 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+                title="Ir para Comandas"
+              >
+                <Receipt className="h-4 w-4 text-amber-600" />
+                <span>Comandas ({openComandasCount})</span>
+              </button>
+            )}
+
+            {activeBarTab !== 'directSale' && (
+              <button
+                onClick={() => setActiveBarTab('directSale')}
+                className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/70 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+                title="Ir para Venda Rápida PDV"
+              >
+                <Zap className="h-4 w-4 text-emerald-600" />
+                <span>Venda Rápida</span>
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Bar Sub-Tabs Navigation */}
-        <div className="pt-3 border-t border-slate-100 flex items-center gap-2 overflow-x-auto scrollbar-thin">
-          {[
-            { id: 'comandas', label: `Comandas (${openComandasCount} abertas)`, icon: Receipt },
-            { id: 'directSale', label: 'Venda Rápida (Sem Comanda)', icon: Zap },
-            { id: 'products', label: 'Cadastro', icon: Package },
-            { id: 'purchases', label: `Compras & Entradas (${purchases.length})`, icon: ShoppingCart },
-            { id: 'reports', label: 'Relatórios de Vendas', icon: BarChart3 },
-            { id: 'movements', label: 'Histórico de Estoque', icon: History }
-          ].map(tab => {
-            const IconComp = tab.icon;
-            const isActive = activeBarTab === tab.id;
+        {/* Tab View Container */}
+        <div className="transition-all">
+          {activeBarTab === 'comandas' && (
+            <BarComandasManager
+              comandas={comandas}
+              products={products}
+              categories={categories}
+              onOpenComanda={handleOpenComanda}
+              onAddItemToComanda={handleAddItemToComanda}
+              onRemoveItemFromComanda={handleRemoveItemFromComanda}
+              onCloseComanda={handleCloseComanda}
+              onCancelComanda={handleCancelComanda}
+              onSwitchToDirectSale={() => setActiveBarTab('directSale')}
+            />
+          )}
 
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveBarTab(tab.id as any)}
-                className={`px-4 py-2.5 rounded-2xl text-xs font-extrabold flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
-                  isActive
-                    ? 'bg-amber-500 text-white shadow-sm font-black'
-                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/60'
-                }`}
-              >
-                <IconComp className={`h-4 w-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                {tab.label}
-              </button>
-            );
-          })}
+          {activeBarTab === 'directSale' && (
+            <BarDirectSaleManager
+              products={products}
+              sales={sales}
+              onDirectSale={handleDirectSale}
+              onCancelSale={handleCancelSale}
+            />
+          )}
+
+          {activeBarTab === 'products' && (
+            <BarProductsManager
+              products={products}
+              categories={categories}
+              onSaveProduct={handleSaveProduct}
+              onDeleteProduct={handleDeleteProduct}
+              onAdjustStock={handleAdjustStock}
+              onSwitchToPurchases={() => setActiveBarTab('purchases')}
+              onSaveCategory={handleSaveCategory}
+              onDeleteCategory={handleDeleteCategory}
+            />
+          )}
+
+          {activeBarTab === 'purchases' && (
+            <BarPurchasesManager
+              products={products}
+              purchases={purchases}
+              onSavePurchase={handleSavePurchase}
+              onDeletePurchase={handleDeletePurchase}
+            />
+          )}
+
+          {activeBarTab === 'reports' && (
+            <BarSalesReports
+              sales={sales}
+              products={products}
+              onCancelSale={handleCancelSale}
+            />
+          )}
+
+          {activeBarTab === 'movements' && (
+            <BarStockMovements
+              movements={movements}
+            />
+          )}
         </div>
-      </div>
-
-      {/* Bar Content Views */}
-      <div className="transition-all">
-        {activeBarTab === 'comandas' && (
-          <BarComandasManager
-            comandas={comandas}
-            products={products}
-            categories={categories}
-            onOpenComanda={handleOpenComanda}
-            onAddItemToComanda={handleAddItemToComanda}
-            onRemoveItemFromComanda={handleRemoveItemFromComanda}
-            onCloseComanda={handleCloseComanda}
-            onCancelComanda={handleCancelComanda}
-            onSwitchToDirectSale={() => setActiveBarTab('directSale')}
-          />
-        )}
-
-        {activeBarTab === 'directSale' && (
-          <BarDirectSaleManager
-            products={products}
-            sales={sales}
-            onDirectSale={handleDirectSale}
-            onCancelSale={handleCancelSale}
-          />
-        )}
-
-        {activeBarTab === 'products' && (
-          <BarProductsManager
-            products={products}
-            categories={categories}
-            onSaveProduct={handleSaveProduct}
-            onDeleteProduct={handleDeleteProduct}
-            onAdjustStock={handleAdjustStock}
-            onSwitchToPurchases={() => setActiveBarTab('purchases')}
-            onSaveCategory={handleSaveCategory}
-            onDeleteCategory={handleDeleteCategory}
-          />
-        )}
-
-        {activeBarTab === 'purchases' && (
-          <BarPurchasesManager
-            products={products}
-            purchases={purchases}
-            onSavePurchase={handleSavePurchase}
-            onDeletePurchase={handleDeletePurchase}
-          />
-        )}
-
-        {activeBarTab === 'reports' && (
-          <BarSalesReports
-            sales={sales}
-            products={products}
-            onCancelSale={handleCancelSale}
-          />
-        )}
-
-        {activeBarTab === 'movements' && (
-          <BarStockMovements
-            movements={movements}
-          />
-        )}
-      </div>
+      </main>
     </div>
   );
 }

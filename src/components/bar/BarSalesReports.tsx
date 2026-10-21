@@ -372,13 +372,31 @@ export default function BarSalesReports({ sales, products, onCancelSale }: BarSa
               </div>
 
               <div className="space-y-1.5 pt-1">
-                <p className="font-bold text-slate-700">Itens do Pedido:</p>
-                {selectedSaleDetails.items.map((item, idx) => (
-                  <div key={idx} className="flex justify-between text-slate-600">
-                    <span>{item.quantity}x {item.productName}</span>
-                    <span className="font-semibold">{formatCurrency(item.totalPrice)}</span>
-                  </div>
-                ))}
+                <p className="font-bold text-slate-700">Itens do Pedido (Agrupados):</p>
+                {(() => {
+                  const groupedMap = new Map<string, { productName: string; quantity: number; totalPrice: number }>();
+                  (selectedSaleDetails.items || []).forEach(item => {
+                    const key = item.productId || item.productName;
+                    const prev = groupedMap.get(key);
+                    if (prev) {
+                      prev.quantity += item.quantity;
+                      prev.totalPrice += item.totalPrice;
+                    } else {
+                      groupedMap.set(key, {
+                        productName: item.productName,
+                        quantity: item.quantity,
+                        totalPrice: item.totalPrice
+                      });
+                    }
+                  });
+
+                  return Array.from(groupedMap.values()).map((item, idx) => (
+                    <div key={idx} className="flex justify-between text-slate-600">
+                      <span><strong>{item.quantity}x</strong> {item.productName}</span>
+                      <span className="font-semibold text-slate-900">{formatCurrency(item.totalPrice)}</span>
+                    </div>
+                  ));
+                })()}
               </div>
 
               {selectedSaleDetails.discount > 0 && (
