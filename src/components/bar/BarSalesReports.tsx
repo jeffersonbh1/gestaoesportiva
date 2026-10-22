@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BarSale, BarProduct, StockMovement } from '../../types';
-import { formatCurrency, getBrasiliaTodayDate } from '../../utils';
+import { formatCurrency, getBrasiliaTodayDate, shiftDateString } from '../../utils';
 import { 
   TrendingUp, 
   DollarSign, 
@@ -18,7 +18,8 @@ import {
   Banknote,
   CheckCircle2,
   XCircle,
-  Zap
+  Zap,
+  Filter
 } from 'lucide-react';
 
 interface BarSalesReportsProps {
@@ -27,8 +28,43 @@ interface BarSalesReportsProps {
   onCancelSale: (saleId: string) => void;
 }
 
+type PeriodPreset = 'hoje' | 'ontem' | '7dias' | '30dias' | 'este_mes' | 'todos' | 'personalizado';
+
+const formatDateBR = (dStr: string): string => {
+  if (!dStr) return '';
+  const parts = dStr.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return dStr;
+};
+
+// Safe date extractor for any format (YYYY-MM-DD, ISO or DD/MM/YYYY)
+const extractSaleDate = (sale: BarSale): string => {
+  if (sale.date && /^\d{4}-\d{2}-\d{2}$/.test(sale.date)) {
+    return sale.date;
+  }
+  if (sale.createdAt) {
+    const isoMatch = sale.createdAt.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) {
+      return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+    }
+    const brMatch = sale.createdAt.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+    if (brMatch) {
+      return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
+    }
+  }
+  return sale.date || '';
+};
+
 export default function BarSalesReports({ sales, products, onCancelSale }: BarSalesReportsProps) {
-  const [periodFilter, setPeriodFilter] = useState<'Hoje' | 'Todos'>('Hoje');
+  const todayStr = getBrasiliaTodayDate();
+
+  // Period Filter States
+  const [datePreset, setDatePreset] = useState<PeriodPreset>('hoje');
+  const [startDate, setStartDate] = useState<string>(todayStr);
+  const [endDate, setEndDate] = useState<string>(todayStr);
+
   const [paymentFilter, setPaymentFilter] = useState<string>('Todos');
   const [originFilter, setOriginFilter] = useState<string>('Todos');
   const [searchTerm, setSearchTerm] = useState('');
@@ -36,13 +72,88 @@ export default function BarSalesReports({ sales, products, onCancelSale }: BarSa
   // Selected Sale for Detailed Modal
   const [selectedSaleDetails, setSelectedSaleDetails] = useState<BarSale | null>(null);
 
-  const todayStr = getBrasiliaTodayDate();
+  // Apply quick period preset
+  const handleApplyPreset = (preset: PeriodPreset) => {
+    setDatePreset(preset);
+    const today = getBrasiliaTodayDate();
+
+    if (preset === 'hoje') {
+      setStartDate(today);
+      setEndDate(today);
+    } else if (preset === 'ontem') {
+      const yesterday = shiftDateString(today, -1);
+      setStartDate(yesterday);
+      setEndDate(yesterday);
+    } else if (preset === '7dias') {
+      setStartDate(shiftDateString(today, -6));
+      setEndDate(today);
+    } else if (preset === '30dias') {
+      setStartDate(shiftDateString(today, -29));
+      setEndDate(today);
+    } else if (preset === 'este_mes') {
+      const [y, m] = today.split('-').map(Number);
+      const start = `${y}-${String(m).padStart(2, '0')}-01`;
+      const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      const end = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      setStartDate(start);
+      setEndDate(end);
+    } else if (preset === 'todos') {
+      setStartDate('');
+      setEndDate('');
+    }
+  };
+
+  const handleStartDateChange = (val: string) => {
+    setStartDate(val);
+    setDatePreset('personalizado');
+  };
+
+  const handleEndDateChange = (val: string) => {
+    setEndDate(val);
+    setDatePreset('personalizado');
+  };
+
+  const getPeriodLabel = () => {
+    if (datePreset === 'hoje' || (startDate === todayStr && endDate === todayStr)) {
+      return `Hoje (${formatDateBR(todayStr)})`;
+    }
+    if (datePreset === 'ontem') {
+      return `Ontem (${formatDateBR(startDate)})`;
+    }
+    if (datePreset === '7dias') {
+      return `Últimos 7 dias (${formatDateBR(startDate)} a ${formatDateBR(endDate)})`;
+    }
+    if (datePreset === '30dias') {
+      return `Últimos 30 dias (${formatDateBR(startDate)} a ${formatDateBR(endDate)})`;
+    }
+    if (datePreset === 'este_mes') {
+      return `Este mês (${formatDateBR(startDate)} a ${formatDateBR(endDate)})`;
+    }
+    if (startDate && endDate) {
+      if (startDate === endDate) {
+        return `Dia ${formatDateBR(startDate)}`;
+      }
+      return `${formatDateBR(startDate)} até ${formatDateBR(endDate)}`;
+    }
+    if (startDate) {
+      return `A partir de ${formatDateBR(startDate)}`;
+    }
+    if (endDate) {
+      return `Até ${formatDateBR(endDate)}`;
+    }
+    return 'Histórico Completo (Todas as datas)';
+  };
 
   // Filter Sales
   const filteredSales = sales.filter(s => {
+    const sDate = extractSaleDate(s);
     let matchesPeriod = true;
-    if (periodFilter === 'Hoje') {
-      matchesPeriod = s.date === todayStr;
+    if (startDate && endDate) {
+      matchesPeriod = !!sDate && sDate >= startDate && sDate <= endDate;
+    } else if (startDate) {
+      matchesPeriod = !!sDate && sDate >= startDate;
+    } else if (endDate) {
+      matchesPeriod = !!sDate && sDate <= endDate;
     }
 
     let matchesPayment = true;
@@ -142,68 +253,225 @@ export default function BarSalesReports({ sales, products, onCancelSale }: BarSa
         </div>
       </div>
 
-      {/* Sales List */}
+      {/* Sales List & Filters */}
       <div className="space-y-4">
-        {/* Filters Bar */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPeriodFilter('Hoje')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
-                periodFilter === 'Hoje'
-                  ? 'bg-amber-500 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              Vendas de Hoje
-            </button>
-            <button
-              onClick={() => setPeriodFilter('Todos')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
-                periodFilter === 'Todos'
-                  ? 'bg-amber-500 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              Histórico Completo
-            </button>
+        {/* Advanced Period & Filter Panel */}
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+          {/* Top row: Title & Quick Period Presets */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                <Calendar className="h-4 w-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                  <span>Filtrar por Período</span>
+                  {datePreset === 'personalizado' && (
+                    <span className="text-[10px] font-extrabold text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-full">
+                      Personalizado
+                    </span>
+                  )}
+                </h4>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  {getPeriodLabel()}
+                </p>
+              </div>
+            </div>
+
+            {/* Period Quick Presets */}
+            <div className="flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('hoje')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  datePreset === 'hoje'
+                    ? 'bg-amber-500 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+              >
+                Hoje
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('ontem')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  datePreset === 'ontem'
+                    ? 'bg-amber-500 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+              >
+                Ontem
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('7dias')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  datePreset === '7dias'
+                    ? 'bg-amber-500 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+              >
+                7 Dias
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('30dias')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  datePreset === '30dias'
+                    ? 'bg-amber-500 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+              >
+                30 Dias
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('este_mes')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  datePreset === 'este_mes'
+                    ? 'bg-amber-500 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+              >
+                Este Mês
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('todos')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  datePreset === 'todos'
+                    ? 'bg-amber-500 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+              >
+                Histórico Completo
+              </button>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
+          {/* Row 2: Custom Date Inputs (Data Início / Data Fim) + Additional Filters */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Date inputs group */}
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <label htmlFor="report-start-date" className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    Data Início:
+                  </label>
+                  <input
+                    id="report-start-date"
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => handleStartDateChange(e.target.value)}
+                    className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                  />
+                </div>
+
+                <span className="text-slate-400 font-bold text-xs">até</span>
+
+                <div className="flex items-center gap-1.5">
+                  <label htmlFor="report-end-date" className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    Data Fim:
+                  </label>
+                  <input
+                    id="report-end-date"
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => handleEndDateChange(e.target.value)}
+                    className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                  />
+                </div>
+
+                {(startDate || endDate) && (
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPreset('todos')}
+                    className="text-slate-400 hover:text-slate-700 p-1 ml-0.5 cursor-pointer transition rounded"
+                    title="Limpar datas selecionadas (mostrar todas)"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Origin Filter */}
+              <select
+                value={originFilter}
+                onChange={(e) => setOriginFilter(e.target.value)}
+                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer focus:outline-none"
+              >
+                <option value="Todos">Todas as Origens</option>
+                <option value="comanda">Comanda</option>
+                <option value="balcão">Balcão (Rápida)</option>
+              </select>
+
+              {/* Payment Method Filter */}
+              <select
+                value={paymentFilter}
+                onChange={(e) => setPaymentFilter(e.target.value)}
+                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer focus:outline-none"
+              >
+                <option value="Todos">Todas as Formas</option>
+                <option value="Pix">Pix</option>
+                <option value="Cartão de Crédito">Crédito</option>
+                <option value="Cartão de Débito">Débito</option>
+                <option value="Dinheiro">Dinheiro</option>
+                <option value="Fiado / Comanda">Fiado / Comanda</option>
+              </select>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-3.5 w-3.5" />
               <input
                 type="text"
                 placeholder="Código ou cliente..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none"
+                className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:bg-white focus:ring-1 focus:ring-amber-500 transition"
               />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Row 3: Active Filters Summary & Payment Breakdown */}
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 pt-2.5 border-t border-slate-100">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-slate-700">Resultado do filtro:</span>
+              <span className="bg-amber-50 text-amber-800 font-extrabold px-2.5 py-0.5 rounded-lg border border-amber-200/80 text-[11px]">
+                {filteredSales.length} {filteredSales.length === 1 ? 'venda' : 'vendas'}
+              </span>
+              {filteredSales.length > 0 && (
+                <span className="text-slate-500 text-[11px]">
+                  • Faturamento: <strong className="text-slate-800 font-bold">{formatCurrency(totalRevenue)}</strong>
+                </span>
+              )}
             </div>
 
-            {/* Origin Filter */}
-            <select
-              value={originFilter}
-              onChange={(e) => setOriginFilter(e.target.value)}
-              className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer"
-            >
-              <option value="Todos">Todas as Origens</option>
-              <option value="comanda">Comanda</option>
-              <option value="balcão">Balcão (Rápida)</option>
-            </select>
-
-            <select
-              value={paymentFilter}
-              onChange={(e) => setPaymentFilter(e.target.value)}
-              className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer"
-            >
-              <option value="Todos">Todas as Formas</option>
-              <option value="Pix">Pix</option>
-              <option value="Cartão de Crédito">Crédito</option>
-              <option value="Cartão de Débito">Débito</option>
-              <option value="Dinheiro">Dinheiro</option>
-              <option value="Fiado / Comanda">Fiado / Comanda</option>
-            </select>
+            {/* Payment Methods breakdown for filtered sales */}
+            {activeSales.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                {['Pix', 'Cartão de Crédito', 'Cartão de Débito', 'Dinheiro'].map((pm) => {
+                  const pmTotal = activeSales
+                    .filter(s => s.paymentMethod === pm)
+                    .reduce((acc, s) => acc + s.finalAmount, 0);
+                  if (pmTotal <= 0) return null;
+                  return (
+                    <span key={pm} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-medium border border-slate-200/60">
+                      {pm === 'Cartão de Crédito' ? 'Crédito' : pm === 'Cartão de Débito' ? 'Débito' : pm}: <strong className="font-bold text-slate-900">{formatCurrency(pmTotal)}</strong>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
@@ -306,7 +574,24 @@ export default function BarSalesReports({ sales, products, onCancelSale }: BarSa
                 {filteredSales.length === 0 && (
                   <tr>
                     <td colSpan={8} className="py-12 text-center text-slate-400">
-                      Nenhuma venda encontrada para esse período.
+                      <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
+                        <div className="p-3 bg-slate-100 rounded-full text-slate-400">
+                          <AlertCircle className="h-6 w-6" />
+                        </div>
+                        <p className="font-bold text-slate-700 text-sm">Nenhuma venda encontrada para este período</p>
+                        <p className="text-xs text-slate-400">
+                          {startDate || endDate
+                            ? `Não encontramos registros entre ${startDate ? formatDateBR(startDate) : 'o início'} e ${endDate ? formatDateBR(endDate) : 'hoje'}.`
+                            : 'Nenhum registro encontrado com os filtros atuais.'}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => handleApplyPreset('todos')}
+                          className="mt-2 px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+                        >
+                          Ver Histórico Completo
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )}

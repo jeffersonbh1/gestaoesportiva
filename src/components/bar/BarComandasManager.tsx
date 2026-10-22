@@ -690,9 +690,9 @@ export default function BarComandasManager({
 
       {/* MODAL 1: CRIAR NOVA COMANDA */}
       {isNewComandaModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 overflow-hidden">
+          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90dvh] sm:max-h-[85vh] flex flex-col shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
+            <div className="shrink-0 p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-white z-10">
               <div className="flex items-center gap-2.5">
                 <div className="h-10 w-10 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center">
                   <Receipt className="h-5 w-5" />
@@ -706,14 +706,16 @@ export default function BarComandasManager({
               </div>
 
               <button
+                type="button"
                 onClick={() => setIsNewComandaModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-2 rounded-xl cursor-pointer transition"
+                title="Fechar janela"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateComandaSubmit} className="space-y-4">
+            <form onSubmit={handleCreateComandaSubmit} className="flex-1 overflow-y-auto min-h-0 p-4 sm:p-6 space-y-4 overscroll-contain">
               <div>
                 <label className="text-xs font-extrabold text-slate-700 mb-1 flex items-center gap-1">
                   <User className="h-3.5 w-3.5 text-amber-500" />
@@ -800,10 +802,10 @@ export default function BarComandasManager({
 
       {/* MODAL 2: LANÇAR CONSUMO / ITENS NA COMANDA */}
       {selectedComandaToAddItems && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl max-w-4xl w-full p-6 space-y-4 shadow-2xl border border-slate-100 max-h-[90vh] flex flex-col justify-between animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 overflow-hidden">
+          <div className="bg-white rounded-3xl max-w-4xl w-full p-4 sm:p-6 space-y-4 shadow-2xl border border-slate-100 max-h-[90dvh] sm:max-h-[88vh] flex flex-col justify-between animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="shrink-0 flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <span className="bg-amber-100 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider">
                   Comanda {selectedComandaToAddItems.code}
@@ -817,8 +819,10 @@ export default function BarComandasManager({
               </div>
 
               <button
+                type="button"
                 onClick={() => setSelectedComandaToAddItems(null)}
-                className="text-slate-400 hover:text-slate-600 p-1"
+                className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-2 rounded-xl cursor-pointer transition"
+                title="Fechar janela"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -1048,9 +1052,10 @@ export default function BarComandasManager({
         const isComandaOpen = activeComanda.status === 'Aberta';
 
         return (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 overflow-hidden">
+            <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90dvh] sm:max-h-[85vh] flex flex-col shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
+              {/* Pinned Sticky Header */}
+              <div className="shrink-0 p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-white z-10">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="bg-amber-100 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider">
@@ -1074,222 +1079,229 @@ export default function BarComandasManager({
                     setSelectedComandaForReceipt(null);
                     setItemToDeleteId(null);
                   }}
-                  className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer transition"
+                  className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-2 rounded-xl cursor-pointer transition"
+                  title="Fechar extrato"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
 
-              {/* Customer metadata box */}
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 text-xs">
-                <div className="flex justify-between border-b border-slate-200/60 pb-1.5">
-                  <span className="text-slate-500 font-medium">Cliente:</span>
-                  <span className="font-bold text-slate-900">{activeComanda.customerName}</span>
+              {/* Scrollable Modal Body */}
+              <div className="flex-1 overflow-y-auto min-h-0 p-4 sm:p-6 space-y-4 overscroll-contain pr-2 sm:pr-4">
+                {/* Customer metadata box */}
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 text-xs">
+                  <div className="flex justify-between border-b border-slate-200/60 pb-1.5">
+                    <span className="text-slate-500 font-medium">Cliente:</span>
+                    <span className="font-bold text-slate-900">{activeComanda.customerName}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-200/60 pb-1.5">
+                    <span className="text-slate-500 font-medium">Telefone:</span>
+                    <span className="font-bold text-slate-900">{activeComanda.customerPhone || 'Não informado'}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-200/60 pb-1.5">
+                    <span className="text-slate-500 font-medium">Local:</span>
+                    <span className="font-bold text-slate-900">{activeComanda.location || 'Balcão'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-medium">Abertura:</span>
+                    <span className="font-bold text-slate-900">{activeComanda.openedAt}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between border-b border-slate-200/60 pb-1.5">
-                  <span className="text-slate-500 font-medium">Telefone:</span>
-                  <span className="font-bold text-slate-900">{activeComanda.customerPhone || 'Não informado'}</span>
-                </div>
-                <div className="flex justify-between border-b border-slate-200/60 pb-1.5">
-                  <span className="text-slate-500 font-medium">Local:</span>
-                  <span className="font-bold text-slate-900">{activeComanda.location || 'Balcão'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Abertura:</span>
-                  <span className="font-bold text-slate-900">{activeComanda.openedAt}</span>
-                </div>
-              </div>
 
-              {/* Itemized consumption list agrupado por produto */}
-              {(() => {
-                const groupedItems = groupComandaItems(activeComanda.items);
-                const totalUnits = groupedItems.reduce((acc, i) => acc + i.quantity, 0);
+                {/* Itemized consumption list agrupado por produto */}
+                {(() => {
+                  const groupedItems = groupComandaItems(activeComanda.items);
+                  const totalUnits = groupedItems.reduce((acc, i) => acc + i.quantity, 0);
 
-                return (
-                  <div className="space-y-2 max-h-72 overflow-y-auto scrollbar-thin pr-1">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                          <Receipt className="h-4 w-4 text-amber-600" />
-                          Extrato Agrupado ({groupedItems.length} {groupedItems.length === 1 ? 'produto' : 'produtos'} • {totalUnits} {totalUnits === 1 ? 'unidade' : 'unidades'})
-                        </p>
-                        <p className="text-[10px] text-slate-400">
-                          Itens consolidados por produto com conferência de consumo.
-                        </p>
+                  return (
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            <Receipt className="h-4 w-4 text-amber-600" />
+                            Extrato Agrupado ({groupedItems.length} {groupedItems.length === 1 ? 'produto' : 'produtos'} • {totalUnits} {totalUnits === 1 ? 'unidade' : 'unidades'})
+                          </p>
+                          <p className="text-[10px] text-slate-400">
+                            Itens consolidados por produto com conferência de consumo.
+                          </p>
+                        </div>
+                        {isComandaOpen && groupedItems.length > 0 && (
+                          <span className="text-[10px] text-slate-400">
+                            Ajuste as quantidades (+ / -)
+                          </span>
+                        )}
                       </div>
-                      {isComandaOpen && groupedItems.length > 0 && (
-                        <span className="text-[10px] text-slate-400">
-                          Ajuste as quantidades (+ / -)
-                        </span>
-                      )}
-                    </div>
 
-                    {groupedItems.length === 0 ? (
-                      <p className="text-xs text-slate-400 italic text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                        Nenhum item lançado ainda.
-                      </p>
-                    ) : (
-                      groupedItems.map((item) => (
-                        <div
-                          key={item.id}
-                          className={`p-3 rounded-2xl border transition flex items-center justify-between text-xs ${
-                            itemToDeleteId === item.id 
-                              ? 'bg-rose-50 border-rose-300' 
-                              : 'bg-slate-50/80 border-slate-200 hover:border-slate-300'
-                          }`}
-                        >
-                          <div className="min-w-0 flex-1 pr-2">
-                            <div className="flex items-center gap-2">
-                              <span className="bg-amber-100 text-amber-900 font-black text-[11px] px-2 py-0.5 rounded-lg border border-amber-200 shadow-2xs">
-                                {item.quantity}x
-                              </span>
-                              <p className="font-bold text-slate-800 line-clamp-1">{item.productName}</p>
+                      {groupedItems.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                          Nenhum item lançado ainda.
+                        </p>
+                      ) : (
+                        groupedItems.map((item) => (
+                          <div
+                            key={item.id}
+                            className={`p-3 rounded-2xl border transition flex items-center justify-between text-xs ${
+                              itemToDeleteId === item.id 
+                                ? 'bg-rose-50 border-rose-300' 
+                                : 'bg-slate-50/80 border-slate-200 hover:border-slate-300'
+                            }`}
+                          >
+                            <div className="min-w-0 flex-1 pr-2">
+                              <div className="flex items-center gap-2">
+                                <span className="bg-amber-100 text-amber-900 font-black text-[11px] px-2 py-0.5 rounded-lg border border-amber-200 shadow-2xs">
+                                  {item.quantity}x
+                                </span>
+                                <p className="font-bold text-slate-800 line-clamp-1">{item.productName}</p>
+                              </div>
+                              <p className="text-[10px] text-slate-500 mt-1 flex flex-wrap items-center gap-1.5">
+                                <span className="font-semibold text-slate-600">{formatCurrency(item.unitPrice)} un</span>
+                                {item.times && item.times.length > 0 && (
+                                  <>
+                                    <span className="text-slate-300">•</span>
+                                    <span className="text-slate-400">
+                                      {item.times.length > 1 
+                                        ? `Lançado às: ${item.times.join(', ')}` 
+                                        : `Lançado às ${item.times[0]}`}
+                                    </span>
+                                  </>
+                                )}
+                              </p>
                             </div>
-                            <p className="text-[10px] text-slate-500 mt-1 flex flex-wrap items-center gap-1.5">
-                              <span className="font-semibold text-slate-600">{formatCurrency(item.unitPrice)} un</span>
-                              {item.times && item.times.length > 0 && (
+
+                            <div className="flex items-center gap-2.5 shrink-0">
+                              <span className="font-black text-slate-900 text-xs sm:text-sm">
+                                {formatCurrency(item.totalPrice)}
+                              </span>
+
+                              {isComandaOpen && (
                                 <>
-                                  <span className="text-slate-300">•</span>
-                                  <span className="text-slate-400">
-                                    {item.times.length > 1 
-                                      ? `Lançado às: ${item.times.join(', ')}` 
-                                      : `Lançado às ${item.times[0]}`}
-                                  </span>
+                                  {itemToDeleteId === item.id ? (
+                                    <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-rose-200 shadow-xs">
+                                      <span className="text-[10px] font-bold text-rose-700 px-1">Excluir tudo?</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          item.itemIds.forEach(id => {
+                                            onRemoveItemFromComanda(activeComanda.id, id);
+                                          });
+                                          setSelectedComandaForReceipt(prev => prev ? {
+                                            ...prev,
+                                            items: prev.items.filter(i => !item.itemIds.includes(i.id)),
+                                            totalAmount: prev.totalAmount - item.totalPrice,
+                                            finalAmount: Math.max(0, prev.totalAmount - item.totalPrice - (prev.discount || 0))
+                                          } : null);
+                                          setItemToDeleteId(null);
+                                        }}
+                                        className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-[10px] font-black cursor-pointer transition shadow-xs"
+                                        title="Confirmar exclusão de todas as unidades deste produto"
+                                      >
+                                        Sim
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setItemToDeleteId(null)}
+                                        className="px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-[10px] font-bold cursor-pointer transition"
+                                        title="Cancelar"
+                                      >
+                                        Não
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-0.5 bg-white border border-slate-200 rounded-xl p-0.5 shadow-2xs">
+                                      {/* Decrement 1 unit */}
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          onRemoveItemFromComanda(activeComanda.id, item.id, 1);
+                                        }}
+                                        className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-rose-100 hover:text-rose-700 text-slate-700 font-extrabold text-xs flex items-center justify-center transition cursor-pointer"
+                                        title="Diminuir 1 unidade (estorno de 1 unidade para o estoque)"
+                                      >
+                                        -
+                                      </button>
+
+                                      {/* Quick Increment 1 unit */}
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const now = new Date();
+                                          const hours = String(now.getHours()).padStart(2, '0');
+                                          const minutes = String(now.getMinutes()).padStart(2, '0');
+                                          const timeStr = `${hours}:${minutes}`;
+
+                                          const itemToAdd: BarComandaItem = {
+                                            id: `ci-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+                                            productId: item.productId,
+                                            productName: item.productName,
+                                            quantity: 1,
+                                            unitPrice: item.unitPrice,
+                                            totalPrice: item.unitPrice,
+                                            addedAt: timeStr
+                                          };
+                                          onAddItemToComanda(activeComanda.id, [itemToAdd]);
+                                        }}
+                                        className="w-6 h-6 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 font-extrabold text-xs flex items-center justify-center transition cursor-pointer"
+                                        title="Adicionar mais 1 unidade deste produto"
+                                      >
+                                        +
+                                      </button>
+
+                                      {/* Full Trash delete */}
+                                      <button
+                                        type="button"
+                                        onClick={() => setItemToDeleteId(item.id)}
+                                        className="w-6 h-6 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition cursor-pointer ml-0.5"
+                                        title="Excluir todas as unidades deste produto"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    </div>
+                                  )}
                                 </>
                               )}
-                            </p>
+                            </div>
                           </div>
-
-                          <div className="flex items-center gap-2.5 shrink-0">
-                            <span className="font-black text-slate-900 text-xs sm:text-sm">
-                              {formatCurrency(item.totalPrice)}
-                            </span>
-
-                            {isComandaOpen && (
-                              <>
-                                {itemToDeleteId === item.id ? (
-                                  <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-rose-200 shadow-xs">
-                                    <span className="text-[10px] font-bold text-rose-700 px-1">Excluir tudo?</span>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        item.itemIds.forEach(id => {
-                                          onRemoveItemFromComanda(activeComanda.id, id);
-                                        });
-                                        setSelectedComandaForReceipt(prev => prev ? {
-                                          ...prev,
-                                          items: prev.items.filter(i => !item.itemIds.includes(i.id)),
-                                          totalAmount: prev.totalAmount - item.totalPrice,
-                                          finalAmount: Math.max(0, prev.totalAmount - item.totalPrice - (prev.discount || 0))
-                                        } : null);
-                                        setItemToDeleteId(null);
-                                      }}
-                                      className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-[10px] font-black cursor-pointer transition shadow-xs"
-                                      title="Confirmar exclusão de todas as unidades deste produto"
-                                    >
-                                      Sim
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setItemToDeleteId(null)}
-                                      className="px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-[10px] font-bold cursor-pointer transition"
-                                      title="Cancelar"
-                                    >
-                                      Não
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-0.5 bg-white border border-slate-200 rounded-xl p-0.5 shadow-2xs">
-                                    {/* Decrement 1 unit */}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        onRemoveItemFromComanda(activeComanda.id, item.id, 1);
-                                      }}
-                                      className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-rose-100 hover:text-rose-700 text-slate-700 font-extrabold text-xs flex items-center justify-center transition cursor-pointer"
-                                      title="Diminuir 1 unidade (estorno de 1 unidade para o estoque)"
-                                    >
-                                      -
-                                    </button>
-
-                                    {/* Quick Increment 1 unit */}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const now = new Date();
-                                        const hours = String(now.getHours()).padStart(2, '0');
-                                        const minutes = String(now.getMinutes()).padStart(2, '0');
-                                        const timeStr = `${hours}:${minutes}`;
-
-                                        const itemToAdd: BarComandaItem = {
-                                          id: `ci-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-                                          productId: item.productId,
-                                          productName: item.productName,
-                                          quantity: 1,
-                                          unitPrice: item.unitPrice,
-                                          totalPrice: item.unitPrice,
-                                          addedAt: timeStr
-                                        };
-                                        onAddItemToComanda(activeComanda.id, [itemToAdd]);
-                                      }}
-                                      className="w-6 h-6 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 font-extrabold text-xs flex items-center justify-center transition cursor-pointer"
-                                      title="Adicionar mais 1 unidade deste produto"
-                                    >
-                                      +
-                                    </button>
-
-                                    {/* Full Trash delete */}
-                                    <button
-                                      type="button"
-                                      onClick={() => setItemToDeleteId(item.id)}
-                                      className="w-6 h-6 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition cursor-pointer ml-0.5"
-                                      title="Excluir todas as unidades deste produto"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* Total Box */}
-              <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-sm font-black text-slate-900">
-                <span>Total da Conta:</span>
-                <span className="text-amber-600 text-base">{formatCurrency(activeComanda.finalAmount)}</span>
+                        ))
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => handleShareWhatsAppReceipt(activeComanda)}
-                  className="flex-1 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
-                >
-                  <Share2 className="h-4 w-4" />
-                  Enviar WhatsApp
-                </button>
+              {/* Pinned Sticky Footer */}
+              <div className="shrink-0 border-t border-slate-200/80 bg-slate-50/95 p-4 sm:p-5 space-y-3 z-10">
+                {/* Total Box */}
+                <div className="flex justify-between items-center text-sm font-black text-slate-900">
+                  <span>Total da Conta:</span>
+                  <span className="text-amber-600 text-base sm:text-lg">{formatCurrency(activeComanda.finalAmount)}</span>
+                </div>
 
-                {isComandaOpen && (
+                <div className="flex items-center gap-2.5">
                   <button
                     type="button"
-                    onClick={() => {
-                      const target = activeComanda;
-                      setSelectedComandaForReceipt(null);
-                      setItemToDeleteId(null);
-                      setSelectedComandaToClose(target);
-                    }}
-                    className="flex-1 py-2.5 bg-slate-900 hover:bg-amber-500 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    onClick={() => handleShareWhatsAppReceipt(activeComanda)}
+                    className="flex-1 py-3 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-700 border border-emerald-300/80 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
                   >
-                    <Check className="h-4 w-4 stroke-[3]" />
-                    Fechar Conta
+                    <Share2 className="h-4 w-4" />
+                    Enviar WhatsApp
                   </button>
-                )}
+
+                  {isComandaOpen && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const target = activeComanda;
+                        setSelectedComandaForReceipt(null);
+                        setItemToDeleteId(null);
+                        setSelectedComandaToClose(target);
+                      }}
+                      className="flex-1 py-3 bg-slate-900 hover:bg-amber-500 active:bg-amber-600 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md"
+                    >
+                      <Check className="h-4 w-4 stroke-[3]" />
+                      Fechar Conta
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -1298,9 +1310,9 @@ export default function BarComandasManager({
 
       {/* MODAL 4: FECHAMENTO DE CONTA E PAGAMENTO */}
       {selectedComandaToClose && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 overflow-hidden">
+          <div className="bg-white rounded-3xl max-w-md w-full max-h-[90dvh] sm:max-h-[85vh] flex flex-col shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
+            <div className="shrink-0 p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-white z-10">
               <div>
                 <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider">
                   Fechamento de Conta
@@ -1310,14 +1322,16 @@ export default function BarComandasManager({
                 </h3>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedComandaToClose(null)}
-                className="text-slate-400 hover:text-slate-600 p-1"
+                className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-2 rounded-xl cursor-pointer transition"
+                title="Fechar janela"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <form onSubmit={handleFinishCloseComanda} className="space-y-4">
+            <form onSubmit={handleFinishCloseComanda} className="flex-1 overflow-y-auto min-h-0 p-4 sm:p-6 space-y-4 overscroll-contain">
               {/* Items summary (agrupado por produto) */}
               <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2 text-xs">
                 <div className="space-y-1.5 max-h-32 overflow-y-auto scrollbar-thin pb-2 border-b border-slate-200/60">
